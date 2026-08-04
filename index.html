@@ -105,7 +105,7 @@
   <h1>지도로 찾는 프리다이빙 컨디션</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
-  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> 다만 <b>너울·조류·표층수온은 공개 API가 없어 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요.</span></div>
+  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
 
   <div class="controls">
     <div class="search-box">
@@ -195,13 +195,8 @@ const LOCATIONS_DB = [
 ];
 
 const DEFAULT_FAVORITES = [
-  {name:'제주 함덕 서우봉해변', lat:33.543, lng:126.669, obsCode:'DT_0004'},
-  {name:'제주 서귀포 문섬', lat:33.222, lng:126.575, obsCode:'DT_0010'},
-  {name:'강원 고성', lat:38.38, lng:128.47, obsCode:'DT_0012'},
+  {name:'강원 삼척 갈남항', lat:37.2806, lng:129.3252, obsCode:'DT_0006'},
   {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, obsCode:'DT_0012'},
-  {name:'경북 울진 후포항', lat:36.677, lng:129.453, obsCode:'DT_0011'},
-  {name:'부산 태종대', lat:35.053, lng:129.087, obsCode:'DT_0005'},
-  {name:'용인 딥스테이션(실내)', lat:37.24, lng:127.20, indoor:true},
 ];
 
 let recentList = [];
@@ -445,13 +440,8 @@ function mockWeatherHour(lat,lng,dateStr,h){
   };
 }
 function mockExtra(lat,lng,dateStr,h){
-  const rng = hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_extra_"+dateStr+"_"+h);
   const waterTempBase = seasonalWaterBase(dateStr, lat) + (hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_wt_"+dateStr)()-0.5)*2;
   return {
-    swell: Math.max(0.1, +(0.4+rng()*0.6).toFixed(1)),
-    swellPeriod: Math.round(8+rng()*6),
-    swellDir: DIRS[Math.floor(rng()*8)],
-    current: Math.round(5+Math.abs(Math.sin((h/12.4)*Math.PI*2))*35),
     waterTemp: +(waterTempBase + Math.sin(h/24*Math.PI*2)*0.4).toFixed(1)
   };
 }
@@ -461,9 +451,7 @@ function hourScore(row){
   if(row.missing) return null;
   let s=100;
   s -= row.wave>1?30:row.wave>0.5?12:0;
-  s -= row.swell>1.5?20:row.swell>0.8?8:0;
   s -= row.windSpeed>9?30:row.windSpeed>5?12:0;
-  s -= row.current>25?25:row.current>12?10:0;
   s -= row.precip>60?10:0;
   return Math.max(0,Math.round(s));
 }
@@ -519,7 +507,7 @@ async function loadAndRender(loc){
 function buildIndoorHours(){
   const hours = [];
   for(let h=0;h<24;h++){
-    hours.push({hour:h, wave:0, windSpeed:0, windDir:null, windDeg:null, temp:27, sky:'실내', precip:0, precipAmount:0, swell:0, swellPeriod:0, swellDir:'N', current:0, waterTemp:28, isLive:false});
+    hours.push({hour:h, wave:0, windSpeed:0, windDir:null, windDeg:null, temp:27, sky:'실내', precip:0, precipAmount:0, waterTemp:28, isLive:false});
   }
   return hours;
 }
@@ -658,18 +646,10 @@ function renderTable(hours, indoor){
     if(indoor || h.wave===null) return '<td>-</td>';
     return '<td>'+riskyText(h.wave+'m', h.wave>=1)+'</td>';
   }).join('') + '</tr>';
-  let swellRow = '<tr><td class="row-label">너울</td>' + twoHourly.map(function(h){
-    if(indoor) return '<td>-</td>';
-    return '<td>'+riskyText(h.swell+'m', h.swell>=1.2)+'<span class="sub">'+h.swellPeriod+'s '+h.swellDir+'</span></td>';
-  }).join('') + '</tr>';
   let windRow = '<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(function(h){
     if(indoor || h.windSpeed===null) return '<td>-</td>';
     const deg = h.windDeg!==null ? h.windDeg : (DIR_DEG[h.windDir]||0);
     return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+riskyText(h.windSpeed+'m/s', h.windSpeed>=8)+'</span></td>';
-  }).join('') + '</tr>';
-  let currentRow = '<tr><td class="row-label">조류</td>' + twoHourly.map(function(h){
-    if(indoor) return '<td>-</td>';
-    return '<td>'+riskyText(h.current+'cm/s', h.current>=20)+'</td>';
   }).join('') + '</tr>';
   let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>';
   let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(function(h){ return '<td>'+(h.temp!==null?h.temp+'℃':'-')+'</td>'; }).join('') + '</tr>';
@@ -678,12 +658,12 @@ function renderTable(hours, indoor){
     if(indoor) return '<td>-</td>';
     return '<td>'+(h.precip!==null?h.precip+'%':'-')+'<span class="sub">'+(h.precipAmount>0?h.precipAmount+'mm':'-')+'</span></td>';
   }).join('') + '</tr>';
-  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+scoreRow+waveRow+swellRow+windRow+currentRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
+  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+scoreRow+waveRow+windRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
   '<div class="legend">'+
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
     '<span><span class="dot" style="background:'+C.coral+'"></span>주의</span>'+
-    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 너울·조류·수온은 <b style="color:'+C.amber+'">추정치</b> · <b style="color:'+C.coral+'">빨간 숫자</b>는 AIDA2 기준 주의 수치</span>'+
+    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 수온은 <b style="color:'+C.amber+'">계절 추정치</b> · <b style="color:'+C.coral+'">빨간 숫자</b>는 AIDA2 기준 주의 수치</span>'+
   '</div>';
 }
 
@@ -857,7 +837,7 @@ document.getElementById('dateInput').addEventListener('change', function(){ if(c
   await loadStorage();
   renderRecent();
   renderFavorites();
-  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 갈남항'; }) || DEFAULT_FAVORITES[3];
+  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 갈남항'; }) || DEFAULT_FAVORITES[0];
   selectLocation(sample);
 })();
 </script>
