@@ -401,7 +401,7 @@ async function fetchWarnings(areaCode){
   const today = new Date();
   const to = fmtYmd(today);
   const fromDate = new Date(today);
-  fromDate.setDate(fromDate.getDate()-3);
+  fromDate.setDate(fromDate.getDate()-10);
   const from = fmtYmd(fromDate);
   const url = API_BASE + '/api/warnings?areaCode=' + areaCode + '&fromTmFc=' + from + '&toTmFc=' + to;
   const res = await fetch(url);
@@ -843,6 +843,25 @@ function nearestLocationInfo(lat,lng){
   return best ? { name: best.name, dist: bestDist } : null;
 }
 
+function nearestDbEntry(lat, lng){
+  let best=null, bestDist=Infinity;
+  LOCATIONS_DB.forEach(function(l){
+    if(l.indoor) return;
+    const d = haversine(lat,lng,l.lat,l.lng);
+    if(d<bestDist){ bestDist=d; best=l; }
+  });
+  return best ? {entry:best, dist:bestDist} : null;
+}
+function attachRegionCodes(loc){
+  if(loc.indoor || loc.areaCode) return loc;
+  const nearest = nearestDbEntry(loc.lat, loc.lng);
+  if(nearest){
+    if(nearest.dist < 50 && nearest.entry.areaCode) loc.areaCode = nearest.entry.areaCode;
+    if(nearest.dist < 25 && nearest.entry.landAreaCode) loc.landAreaCode = nearest.entry.landAreaCode;
+  }
+  return loc;
+}
+
 function reverseGeocode(lat,lng){
   const nearest = nearestLocationInfo(lat,lng);
   const nearSuffix = (nearest && nearest.dist > 0.3 && nearest.dist < 10)
@@ -850,7 +869,7 @@ function reverseGeocode(lat,lng){
     : '';
   if(!kakaoGeocoder){
     const fallback = nearest ? (nearest.name + ' 인근 해상 (약 ' + nearest.dist.toFixed(1) + 'km)') : (lat.toFixed(4)+', '+lng.toFixed(4));
-    selectLocation({name: fallback, lat: lat, lng: lng, indoor:false});
+    selectLocation(attachRegionCodes({name: fallback, lat: lat, lng: lng, indoor:false}));
     return;
   }
   kakaoGeocoder.coord2Address(lng, lat, function(result, status){
@@ -868,7 +887,7 @@ function reverseGeocode(lat,lng){
     } else {
       name = name + nearSuffix;
     }
-    selectLocation({name:name, lat:lat, lng:lng, indoor:false});
+    selectLocation(attachRegionCodes({name:name, lat:lat, lng:lng, indoor:false}));
   });
 }
 map.on('click', function(e){ reverseGeocode(e.latlng.lat, e.latlng.lng); });
@@ -917,7 +936,7 @@ async function runSearch(query){
     const results = await kakaoSearch(query);
     if(results && results.length>0){
       const r = results[0];
-      selectLocation({name:r.name, lat:r.lat, lng:r.lng, indoor:false});
+      selectLocation(attachRegionCodes({name:r.name, lat:r.lat, lng:r.lng, indoor:false}));
       searchStatus.textContent = '';
     } else { searchStatus.textContent = '검색 결과가 없어요. 지도를 직접 클릭해서 위치를 찍어주세요.'; }
   }catch(err){ searchStatus.textContent = '검색 중 오류가 발생했어요. 지도를 클릭해서 위치를 찍어주세요.'; }
@@ -939,7 +958,7 @@ searchInput.addEventListener('input', function(){
       results.forEach(function(r){
         const b = document.createElement('button');
         b.innerHTML = '<span>'+r.name+'</span><span class="tag">'+(r.address ? r.address.split(' ').slice(0,2).join(' ') : '카카오맵')+'</span>';
-        b.addEventListener('click', function(){ searchInput.value = r.name; hideSuggest(); selectLocation({name:r.name, lat:r.lat, lng:r.lng, indoor:false}); searchStatus.textContent=''; });
+        b.addEventListener('click', function(){ searchInput.value = r.name; hideSuggest(); selectLocation(attachRegionCodes({name:r.name, lat:r.lat, lng:r.lng, indoor:false})); searchStatus.textContent=''; });
         suggestBox.appendChild(b);
       });
       suggestBox.style.display='block';
