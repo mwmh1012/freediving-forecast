@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   const { obs_post_id, date } = req.query;
   const key = process.env.DATA_GO_KR_KEY;
-  const url = `https://apis.data.go.kr/1192136/tideFcstHghLw?serviceKey=${key}&ObsCode=${obs_post_id}&Date=${date}&resultType=json`;
+  const url = `https://apis.data.go.kr/1192136/tideFcstHghLw/GetTideFcstHghLwApiService?serviceKey=${key}&type=json&numOfRows=10&pageNo=1&obsCode=${obs_post_id}&reqDate=${date}`;
   try {
     const r = await fetch(url);
     const data = await r.json();
