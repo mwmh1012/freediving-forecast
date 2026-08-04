@@ -646,12 +646,29 @@ function riskyText(text, isRisky){
   return isRisky ? '<span style="color:var(--coral);font-weight:700">'+text+'</span>' : text;
 }
 
+function nearestColumnHour(hhmm){
+  const parts = hhmm.split(':');
+  const hh = parseInt(parts[0],10), mm = parseInt(parts[1],10);
+  const totalHour = hh + mm/60;
+  let nearest = Math.round(totalHour/2)*2;
+  if(nearest>22) nearest=22;
+  if(nearest<0) nearest=0;
+  return nearest;
+}
+
 function renderTable(hours, indoor, sunTimes){
   const twoHourly = hours.filter(function(h){ return h.hour%2===0; });
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
   let sunRow = '';
   if(!indoor && sunTimes){
-    sunRow = '<tr><td class="row-label">일출/일몰</td><td colspan="'+twoHourly.length+'" style="text-align:center;line-height:1.5;">'+sunTimes.sunrise+'<span class="sub">'+sunTimes.sunset+'</span></td></tr>';
+    const sunriseCol = nearestColumnHour(sunTimes.sunrise);
+    const sunsetCol = nearestColumnHour(sunTimes.sunset);
+    sunRow = '<tr><td class="row-label">일출/일몰</td>' + twoHourly.map(function(h){
+      const parts = [];
+      if(h.hour === sunriseCol) parts.push('🌅'+sunTimes.sunrise);
+      if(h.hour === sunsetCol) parts.push('🌇'+sunTimes.sunset);
+      return '<td style="font-size:10px;">'+(parts.length ? parts.join('<br>') : '-')+'</td>';
+    }).join('') + '</tr>';
   }
   let scoreRow = '<tr><td class="row-label">적합도</td>' + twoHourly.map(function(h){
     const s = hourScore(indoor?{sky:'실내'}:h);
