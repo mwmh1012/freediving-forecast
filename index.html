@@ -6,6 +6,7 @@
 <title>프리다이빙 지도 검색 · 시간대별 컨디션</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=94e7476ddb0a508a53d0ad64751087a2&libraries=services"></script>
 <style>
   :root{
     --abyss:#081A28; --panel:#0F2B3E; --panel2:#153C54; --line:#1E4E68;
@@ -46,8 +47,11 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin-bottom:20px;}
   .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
   .card-head h3{font-size:15px;font-weight:700;margin:0;}
-  .card-head .meta{font-size:11px;color:var(--foamDim);font-family:ui-monospace,monospace;}
-  .legend{display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--foamDim);}
+  .card-head .meta{font-size:11px;color:var(--foamDim);font-family:ui-monospace,monospace;display:flex;align-items:center;gap:6px;}
+  .badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.03em;}
+  .badge.live{background:rgba(49,216,184,.18);color:var(--teal);border:1px solid rgba(49,216,184,.4);}
+  .badge.mock{background:rgba(240,174,78,.15);color:var(--amber);border:1px solid rgba(240,174,78,.35);}
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--foamDim);flex-wrap:wrap;}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;}
   .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;}
   table{border-collapse:collapse;width:100%;font-size:11.5px;table-layout:fixed;}
@@ -64,6 +68,7 @@
   .placeholder{padding:40px 0;text-align:center;color:var(--foamDim);font-size:13px;}
   .leaflet-popup-content-wrapper{background:var(--panel2);color:var(--foam);}
   .leaflet-popup-tip{background:var(--panel2);}
+  .loading{padding:30px 0;text-align:center;color:var(--foamDim);font-size:13px;}
 </style>
 </head>
 <body>
@@ -72,7 +77,7 @@
   <h1>지도로 찾는 프리다이빙 컨디션</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
-  <div class="note">⚠️ <span><b>검색은 먼저 자체 보유 지점 DB(약 30곳)에서 찾고</b>, 없는 지명이면 OpenStreetMap 실시간 검색을 추가로 시도해요 — 이 환경에서는 실시간 검색이 막힐 때가 있어서, 이렇게 이중으로 처리해 안정성을 높였어요. <b>파고·너울·풍속·조류·조위·수온은 아직 목업(예시) 데이터</b>고요, 실제 해양 데이터는 국립해양조사원/기상청 API 키를 받으면 연동해드릴게요.</span></div>
+  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> 다만 <b>너울·조류·표층수온은 공개 API가 없어 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요.</span></div>
 
   <div class="controls">
     <div class="search-box">
@@ -97,97 +102,97 @@
   <div id="results"></div>
 
   <div class="footer-note">
-    지점 DB는 실제 위도·경도 기준이며, 부족한 지명은 OpenStreetMap Nominatim으로 보완 검색합니다(비상업 무료 API, 초당 1회 제한 — 이 환경에선 응답이 실패할 수 있어요). 해양 수치는 mock이며, khoa.go.kr(조위·수온) · data.go.kr(기상청 해상예보) 인증키를 발급받아 주시면 실데이터로 교체해드립니다.
+    검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
+    조회 날짜가 기상청 단기예보 제공 범위(대략 오늘부터 2~3일)를 벗어나면 자동으로 추정치로 대체돼요.
   </div>
 </div>
 
 <script>
 const C = {teal:'#31D8B8', amber:'#F0AE4E', coral:'#E8563E'};
+const API_BASE = 'https://freediving-forecast.vercel.app';
 
-// ---- offline curated location DB (real coordinates) ----
 const LOCATIONS_DB = [
-  {name:'제주 함덕 서우봉해변', lat:33.5434, lng:126.6698, type:'해수욕장', aliases:['함덕','서우봉']},
-  {name:'제주 금능해수욕장', lat:33.3899, lng:126.2354, type:'해수욕장', aliases:['금능']},
-  {name:'제주 월정리해수욕장', lat:33.5560, lng:126.7962, type:'해수욕장', aliases:['월정리']},
-  {name:'제주 협재해수욕장', lat:33.3943, lng:126.2399, type:'해수욕장', aliases:['협재']},
-  {name:'제주 곽지해수욕장', lat:33.4509, lng:126.3057, type:'해수욕장', aliases:['곽지']},
-  {name:'제주 표선해수욕장', lat:33.3273, lng:126.8377, type:'해수욕장', aliases:['표선']},
-  {name:'제주 삼양해수욕장(검은모래)', lat:33.5260, lng:126.5869, type:'해수욕장', aliases:['삼양']},
-  {name:'제주 서귀포 문섬', lat:33.222, lng:126.575, type:'포인트', aliases:['문섬']},
-  {name:'제주 서귀포 범섬', lat:33.228, lng:126.55, type:'포인트', aliases:['범섬']},
-  {name:'제주 서귀포 섭섬', lat:33.230, lng:126.572, type:'포인트', aliases:['섭섬']},
-  {name:'강원 망상해수욕장', lat:37.5937, lng:129.0900, type:'해수욕장', aliases:['망상']},
-  {name:'강원 한섬해변', lat:37.5199, lng:129.1224, type:'해변', aliases:['한섬']},
-  {name:'강원 추암해변', lat:37.4777, lng:129.1595, type:'해변', aliases:['추암','촛대바위']},
-  {name:'강원 감추해변', lat:37.5152, lng:129.1257, type:'해변', aliases:['감추']},
-  {name:'강원 동해 묵호 해랑전망대', lat:37.5542, lng:129.1203, type:'전망대', aliases:['묵호','해랑전망대']},
-  {name:'강원 동해 도째비골 해랑전망대', lat:37.5541, lng:129.1208, type:'전망대', aliases:['도째비골']},
-  {name:'강원 삼척 갈남항', lat:37.2806, lng:129.3252, type:'항구', aliases:['갈남','갈남항','삼척 갈남']},
-  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, type:'해변', aliases:['하조대']},
-  {name:'강원 고성 천진해수욕장', lat:38.2594, lng:128.5598, type:'해수욕장', aliases:['천진','천진해수욕장']},
-  {name:'강원 고성', lat:38.38, lng:128.47, type:'지역', aliases:['고성']},
-  {name:'강원 속초', lat:38.207, lng:128.594, type:'지역', aliases:['속초']},
-  {name:'경북 영덕 죽도산 전망대(축산등대)', lat:36.5078, lng:129.4515, type:'전망대', aliases:['죽도산','영덕 전망대']},
-  {name:'경북 포항 칠포 해오름전망대', lat:36.1470, lng:129.3973, type:'전망대', aliases:['칠포','해오름전망대']},
-  {name:'경북 울진 후포항', lat:36.677, lng:129.453, type:'항구', aliases:['후포항','울진']},
-  {name:'경북 울릉도 천부항', lat:37.5408, lng:130.8719, type:'항구', aliases:['천부항','천부']},
-  {name:'경북 울릉도 봉래폭포', lat:37.4984, lng:130.8833, type:'포인트', aliases:['봉래폭포']},
-  {name:'경북 울릉도 촛대바위', lat:37.4925, lng:130.9137, type:'포인트', aliases:['촛대바위 울릉']},
-  {name:'경북 울릉도 독도전망대', lat:37.4807, lng:130.9041, type:'전망대', aliases:['독도전망대']},
-  {name:'부산 송도해수욕장', lat:35.0754, lng:129.0168, type:'해수욕장', aliases:['송도']},
-  {name:'부산 감지해변', lat:35.0599, lng:129.0775, type:'해변', aliases:['감지해변','영도']},
-  {name:'부산 다대포', lat:35.0564, lng:128.9577, type:'해변', aliases:['다대포']},
-  {name:'부산 태종대', lat:35.053, lng:129.087, type:'포인트', aliases:['태종대']},
-  {name:'부산 암남공원', lat:35.0609, lng:129.0161, type:'공원', aliases:['암남공원']},
-  {name:'경남 통영', lat:34.85, lng:128.43, type:'지역', aliases:['통영']},
-  {name:'전남 고흥 남열해돋이해수욕장', lat:34.5805, lng:127.4869, type:'해수욕장', aliases:['남열','고흥 서핑']},
-  {name:'전남 신안 대광해수욕장', lat:35.1041, lng:126.0730, type:'해수욕장', aliases:['대광']},
-  {name:'전남 신안 시목해수욕장', lat:34.6729, lng:125.9523, type:'해수욕장', aliases:['시목']},
-  {name:'인천 을왕리해변', lat:37.4455, lng:126.3730, type:'해변', aliases:['을왕리']},
-  {name:'인천 선녀바위해변', lat:37.4397, lng:126.3782, type:'해변', aliases:['선녀바위']},
-  {name:'인천 무의도 하나개해변', lat:37.3854, lng:126.4088, type:'해변', aliases:['하나개','무의도']},
-  {name:'인천 강화 동막해변', lat:37.5926, lng:126.4582, type:'해변', aliases:['동막','강화']},
+  {name:'제주 함덕 서우봉해변', lat:33.5434, lng:126.6698, type:'해수욕장', aliases:['함덕','서우봉'], obsCode:'DT_0004'},
+  {name:'제주 금능해수욕장', lat:33.3899, lng:126.2354, type:'해수욕장', aliases:['금능'], obsCode:'DT_0004'},
+  {name:'제주 월정리해수욕장', lat:33.5560, lng:126.7962, type:'해수욕장', aliases:['월정리'], obsCode:'DT_0022'},
+  {name:'제주 협재해수욕장', lat:33.3943, lng:126.2399, type:'해수욕장', aliases:['협재'], obsCode:'DT_0004'},
+  {name:'제주 곽지해수욕장', lat:33.4509, lng:126.3057, type:'해수욕장', aliases:['곽지'], obsCode:'DT_0004'},
+  {name:'제주 표선해수욕장', lat:33.3273, lng:126.8377, type:'해수욕장', aliases:['표선'], obsCode:'DT_0010'},
+  {name:'제주 삼양해수욕장(검은모래)', lat:33.5260, lng:126.5869, type:'해수욕장', aliases:['삼양'], obsCode:'DT_0004'},
+  {name:'제주 서귀포 문섬', lat:33.222, lng:126.575, type:'포인트', aliases:['문섬'], obsCode:'DT_0010'},
+  {name:'제주 서귀포 범섬', lat:33.228, lng:126.55, type:'포인트', aliases:['범섬'], obsCode:'DT_0010'},
+  {name:'제주 서귀포 섭섬', lat:33.230, lng:126.572, type:'포인트', aliases:['섭섬'], obsCode:'DT_0010'},
+  {name:'제주 형제섬', lat:33.2100, lng:126.3143, type:'포인트', aliases:['형제섬'], obsCode:'DT_0023'},
+  {name:'강원 망상해수욕장', lat:37.5937, lng:129.0900, type:'해수욕장', aliases:['망상'], obsCode:'DT_0006'},
+  {name:'강원 한섬해변', lat:37.5199, lng:129.1224, type:'해변', aliases:['한섬'], obsCode:'DT_0006'},
+  {name:'강원 추암해변', lat:37.4777, lng:129.1595, type:'해변', aliases:['추암','촛대바위'], obsCode:'DT_0006'},
+  {name:'강원 감추해변', lat:37.5152, lng:129.1257, type:'해변', aliases:['감추'], obsCode:'DT_0006'},
+  {name:'강원 동해 묵호 해랑전망대', lat:37.5542, lng:129.1203, type:'전망대', aliases:['묵호','해랑전망대'], obsCode:'DT_0006'},
+  {name:'강원 동해 도째비골 해랑전망대', lat:37.5541, lng:129.1208, type:'전망대', aliases:['도째비골'], obsCode:'DT_0006'},
+  {name:'강원 삼척 장호항', lat:37.2882, lng:129.3176, type:'항구', aliases:['장호항','장호'], obsCode:'DT_0006'},
+  {name:'강원 삼척 갈남항', lat:37.2806, lng:129.3252, type:'항구', aliases:['갈남','갈남항','삼척 갈남'], obsCode:'DT_0006'},
+  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, type:'해변', aliases:['하조대'], obsCode:'DT_0012'},
+  {name:'강원 강릉 영진해변', lat:37.8690, lng:128.8456, type:'해변', aliases:['영진','영진해변'], obsCode:'DT_0006'},
+  {name:'강원 고성 문암해변', lat:38.2966, lng:128.5494, type:'해변', aliases:['문암','문암해변'], obsCode:'DT_0012'},
+  {name:'강원 고성 천진해수욕장', lat:38.2594, lng:128.5598, type:'해수욕장', aliases:['천진','천진해수욕장'], obsCode:'DT_0012'},
+  {name:'강원 고성', lat:38.38, lng:128.47, type:'지역', aliases:['고성'], obsCode:'DT_0012'},
+  {name:'강원 속초', lat:38.207, lng:128.594, type:'지역', aliases:['속초'], obsCode:'DT_0012'},
+  {name:'경북 영덕 죽도산 전망대(축산등대)', lat:36.5078, lng:129.4515, type:'전망대', aliases:['죽도산','영덕 전망대'], obsCode:'DT_0011'},
+  {name:'경북 포항 칠포 해오름전망대', lat:36.1470, lng:129.3973, type:'전망대', aliases:['칠포','해오름전망대'], obsCode:'DT_0011'},
+  {name:'경북 포항 구룡포해수욕장', lat:35.9968, lng:129.5661, type:'해수욕장', aliases:['구룡포'], obsCode:'DT_0011'},
+  {name:'경북 울진 후포항', lat:36.677, lng:129.453, type:'항구', aliases:['후포항','울진'], obsCode:'DT_0011'},
+  {name:'경북 울진 후정해수욕장', lat:37.0720, lng:129.4136, type:'해수욕장', aliases:['후정'], obsCode:'DT_0011'},
+  {name:'경북 울진 매화 해양레포츠센터(나곡)', lat:36.8902, lng:129.4128, type:'포인트', aliases:['나곡','울진 나곡','매화'], obsCode:'DT_0011'},
+  {name:'경북 울릉도 천부항', lat:37.5408, lng:130.8719, type:'항구', aliases:['천부항','천부'], obsCode:'DT_0013'},
+  {name:'경북 울릉도 봉래폭포', lat:37.4984, lng:130.8833, type:'포인트', aliases:['봉래폭포'], obsCode:'DT_0013'},
+  {name:'경북 울릉도 촛대바위', lat:37.4925, lng:130.9137, type:'포인트', aliases:['촛대바위 울릉'], obsCode:'DT_0013'},
+  {name:'경북 울릉도 독도전망대', lat:37.4807, lng:130.9041, type:'전망대', aliases:['독도전망대'], obsCode:'DT_0013'},
+  {name:'부산 송도해수욕장', lat:35.0754, lng:129.0168, type:'해수욕장', aliases:['송도'], obsCode:'DT_0005'},
+  {name:'부산 감지해변', lat:35.0599, lng:129.0775, type:'해변', aliases:['감지해변','영도'], obsCode:'DT_0005'},
+  {name:'부산 다대포', lat:35.0564, lng:128.9577, type:'해변', aliases:['다대포'], obsCode:'DT_0005'},
+  {name:'부산 태종대', lat:35.053, lng:129.087, type:'포인트', aliases:['태종대'], obsCode:'DT_0005'},
+  {name:'부산 암남공원', lat:35.0609, lng:129.0161, type:'공원', aliases:['암남공원'], obsCode:'DT_0005'},
+  {name:'경남 통영', lat:34.85, lng:128.43, type:'지역', aliases:['통영'], obsCode:'DT_0014'},
+  {name:'전남 고흥 남열해돋이해수욕장', lat:34.5805, lng:127.4869, type:'해수욕장', aliases:['남열','고흥 서핑'], obsCode:'DT_0026'},
+  {name:'전남 여수 거문도', lat:34.0485, lng:127.3183, type:'포인트', aliases:['거문도'], obsCode:'DT_0031'},
+  {name:'전남 신안 대광해수욕장', lat:35.1041, lng:126.0730, type:'해수욕장', aliases:['대광'], obsCode:'DT_0007'},
+  {name:'전남 신안 시목해수욕장', lat:34.6729, lng:125.9523, type:'해수욕장', aliases:['시목'], obsCode:'DT_0007'},
+  {name:'인천 을왕리해변', lat:37.4455, lng:126.3730, type:'해변', aliases:['을왕리'], obsCode:'DT_0001'},
+  {name:'인천 선녀바위해변', lat:37.4397, lng:126.3782, type:'해변', aliases:['선녀바위'], obsCode:'DT_0001'},
+  {name:'인천 무의도 하나개해변', lat:37.3854, lng:126.4088, type:'해변', aliases:['하나개','무의도'], obsCode:'DT_0001'},
+  {name:'인천 강화 동막해변', lat:37.5926, lng:126.4582, type:'해변', aliases:['동막','강화'], obsCode:'DT_0032'},
   {name:'용인 딥스테이션(실내)', lat:37.24, lng:127.20, type:'실내', aliases:['딥스테이션','용인'], indoor:true},
+  {name:'경기 가평 K-26 다이브풀(실내)', lat:37.7029, lng:127.5163, type:'실내', aliases:['k26','케이26','가평'], indoor:true},
 ];
 
 const DEFAULT_FAVORITES = [
-  {name:'제주 함덕 서우봉해변', lat:33.543, lng:126.669},
-  {name:'제주 서귀포 문섬', lat:33.222, lng:126.575},
-  {name:'강원 고성', lat:38.38, lng:128.47},
-  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760},
-  {name:'경북 울진 후포항', lat:36.677, lng:129.453},
-  {name:'부산 태종대', lat:35.053, lng:129.087},
+  {name:'제주 함덕 서우봉해변', lat:33.543, lng:126.669, obsCode:'DT_0004'},
+  {name:'제주 서귀포 문섬', lat:33.222, lng:126.575, obsCode:'DT_0010'},
+  {name:'강원 고성', lat:38.38, lng:128.47, obsCode:'DT_0012'},
+  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, obsCode:'DT_0012'},
+  {name:'경북 울진 후포항', lat:36.677, lng:129.453, obsCode:'DT_0011'},
+  {name:'부산 태종대', lat:35.053, lng:129.087, obsCode:'DT_0005'},
   {name:'용인 딥스테이션(실내)', lat:37.24, lng:127.20, indoor:true},
 ];
 
 let recentList = [];
 let favList = [];
-let currentLoc = null; // {name, lat, lng, indoor}
+let currentLoc = null;
 
-// ---- persistent storage helpers ----
 async function loadStorage(){
-  try{
-    const r = await window.storage.get('recent');
-    recentList = r ? JSON.parse(r.value) : [];
-  }catch(e){ recentList = []; }
-  try{
-    const f = await window.storage.get('favorites');
-    favList = f ? JSON.parse(f.value) : null;
-  }catch(e){ favList = null; }
+  try{ const r = await window.storage.get('recent'); recentList = r ? JSON.parse(r.value) : []; }catch(e){ recentList = []; }
+  try{ const f = await window.storage.get('favorites'); favList = f ? JSON.parse(f.value) : null; }catch(e){ favList = null; }
   if(!favList){ favList = DEFAULT_FAVORITES.slice(); saveFavorites(); }
 }
 async function saveRecent(){ try{ await window.storage.set('recent', JSON.stringify(recentList)); }catch(e){} }
 async function saveFavorites(){ try{ await window.storage.set('favorites', JSON.stringify(favList)); }catch(e){} }
 
-function sameLoc(a,b){
-  return Math.abs(a.lat-b.lat)<0.0008 && Math.abs(a.lng-b.lng)<0.0008;
-}
+function sameLoc(a,b){ return Math.abs(a.lat-b.lat)<0.0008 && Math.abs(a.lng-b.lng)<0.0008; }
 function addRecent(loc){
   recentList = recentList.filter(l=>!sameLoc(l,loc));
-  recentList.unshift({name:loc.name, lat:loc.lat, lng:loc.lng, indoor:!!loc.indoor});
+  recentList.unshift({name:loc.name, lat:loc.lat, lng:loc.lng, indoor:!!loc.indoor, obsCode:loc.obsCode||null});
   recentList = recentList.slice(0,5);
-  saveRecent();
-  renderRecent();
+  saveRecent(); renderRecent();
 }
 function isFavorite(loc){ return favList.some(l=>sameLoc(l,loc)); }
 function toggleFavorite(){
@@ -195,34 +200,22 @@ function toggleFavorite(){
   if(isFavorite(currentLoc)){
     favList = favList.filter(l=>!sameLoc(l,currentLoc));
   } else {
-    if(favList.length>=10){
-      document.getElementById('searchStatus').textContent = '즐겨찾기는 최대 10곳까지 저장할 수 있어요. 하나를 먼저 삭제해주세요.';
-      return;
-    }
-    favList.push({name:currentLoc.name, lat:currentLoc.lat, lng:currentLoc.lng, indoor:!!currentLoc.indoor});
+    if(favList.length>=10){ document.getElementById('searchStatus').textContent = '즐겨찾기는 최대 10곳까지 저장할 수 있어요.'; return; }
+    favList.push({name:currentLoc.name, lat:currentLoc.lat, lng:currentLoc.lng, indoor:!!currentLoc.indoor, obsCode:currentLoc.obsCode||null});
   }
-  saveFavorites();
-  renderFavorites();
-  updateFavToggle();
+  saveFavorites(); renderFavorites(); updateFavToggle();
 }
 function updateFavToggle(){
   const btn = document.getElementById('favToggle');
-  if(currentLoc && isFavorite(currentLoc)){
-    btn.textContent = '★ 즐겨찾기됨';
-    btn.classList.add('active');
-  } else {
-    btn.textContent = '☆ 즐겨찾기';
-    btn.classList.remove('active');
-  }
+  if(currentLoc && isFavorite(currentLoc)){ btn.textContent = '★ 즐겨찾기됨'; btn.classList.add('active'); }
+  else { btn.textContent = '☆ 즐겨찾기'; btn.classList.remove('active'); }
 }
-
 function renderRecent(){
   const el = document.getElementById('recentChips');
   if(recentList.length===0){ el.innerHTML = '<span class="empty-hint">아직 검색 기록이 없어요.</span>'; return; }
   el.innerHTML = '';
   recentList.forEach(loc=>{
-    const b = document.createElement('button');
-    b.className='chip';
+    const b = document.createElement('button'); b.className='chip';
     b.innerHTML = `<span>${loc.name}</span>`;
     b.addEventListener('click', ()=>selectLocation(loc));
     el.appendChild(b);
@@ -230,21 +223,16 @@ function renderRecent(){
 }
 function renderFavorites(){
   const el = document.getElementById('favChips');
-  if(favList.length===0){ el.innerHTML = '<span class="empty-hint">즐겨찾는 곳이 없어요. ☆ 즐겨찾기 버튼으로 추가해보세요.</span>'; return; }
+  if(favList.length===0){ el.innerHTML = '<span class="empty-hint">즐겨찾는 곳이 없어요.</span>'; return; }
   el.innerHTML = '';
   favList.forEach(loc=>{
-    const b = document.createElement('button');
-    b.className='chip';
+    const b = document.createElement('button'); b.className='chip';
     b.innerHTML = `<span>${loc.name}</span><span class="x" data-remove="1">✕</span>`;
     b.addEventListener('click', (e)=>{
       if(e.target.dataset.remove){
         favList = favList.filter(l=>!sameLoc(l,loc));
-        saveFavorites();
-        renderFavorites();
-        updateFavToggle();
-      } else {
-        selectLocation(loc);
-      }
+        saveFavorites(); renderFavorites(); updateFavToggle();
+      } else { selectLocation(loc); }
     });
     el.appendChild(b);
   });
@@ -255,72 +243,179 @@ function selectLocation(loc){
   currentLoc = loc;
   addRecent(loc);
   updateFavToggle();
-  renderResults(loc.name, loc.lat, loc.lng, currentDateStr(), !!loc.indoor);
+  loadAndRender(loc);
 }
 
-// ---- seeded RNG ----
-function hashSeed(str){
-  let h = 1779033703 ^ str.length;
-  for (let i=0;i<str.length;i++){
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = (h<<13)|(h>>>19);
-  }
-  return function(){
-    h = Math.imul(h ^ (h>>>16), 2246822507);
-    h = Math.imul(h ^ (h>>>13), 3266489909);
-    h ^= h>>>16;
-    return (h>>>0)/4294967296;
-  };
+function latLngToGrid(lat, lon){
+  const RE=6371.00877, GRID=5.0, SLAT1=30.0, SLAT2=60.0, OLON=126.0, OLAT=38.0, XO=43, YO=136;
+  const DEGRAD = Math.PI/180.0;
+  const re = RE/GRID;
+  const slat1=SLAT1*DEGRAD, slat2=SLAT2*DEGRAD, olon=OLON*DEGRAD, olat=OLAT*DEGRAD;
+  let sn = Math.tan(Math.PI*0.25+slat2*0.5)/Math.tan(Math.PI*0.25+slat1*0.5);
+  sn = Math.log(Math.cos(slat1)/Math.cos(slat2))/Math.log(sn);
+  let sf = Math.tan(Math.PI*0.25+slat1*0.5);
+  sf = Math.pow(sf,sn)*Math.cos(slat1)/sn;
+  let ro = Math.tan(Math.PI*0.25+olat*0.5);
+  ro = re*sf/Math.pow(ro,sn);
+  const raLat = lat*DEGRAD;
+  let ra = Math.tan(Math.PI*0.25+raLat*0.5);
+  ra = re*sf/Math.pow(ra,sn);
+  let theta = lon*DEGRAD - olon;
+  if(theta>Math.PI) theta -= 2*Math.PI;
+  if(theta<-Math.PI) theta += 2*Math.PI;
+  theta *= sn;
+  const nx = Math.floor(ra*Math.sin(theta)+XO+0.5);
+  const ny = Math.floor(ro-ra*Math.cos(theta)+YO+0.5);
+  return {nx, ny};
 }
-const SKY=["맑음","구름조금","구름많음","흐림"];
-const SKY_ICON={"맑음":"☀️","구름조금":"🌤️","구름많음":"⛅","흐림":"☁️","비":"🌧️","눈":"🌨️","실내":"🏠"};
+
+function kmaBaseDateTime(){
+  const slots=[2,5,8,11,14,17,20,23];
+  const now = new Date();
+  let h = now.getHours(), m = now.getMinutes();
+  let baseTime=null, d = new Date(now);
+  for(let i=slots.length-1;i>=0;i--){
+    if(h>slots[i] || (h===slots[i] && m>=10)){ baseTime = String(slots[i]).padStart(2,'0')+'00'; break; }
+  }
+  if(!baseTime){ d.setDate(d.getDate()-1); baseTime='2300'; }
+  const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+  return { baseDate: `${y}${mo}${da}`, baseTime };
+}
+
+const SKY_MAP = {'1':'맑음','3':'구름많음','4':'흐림'};
+const PTY_MAP = {'0':null,'1':'비','2':'비','3':'눈','4':'소나기'};
+const SKY_ICON={"맑음":"☀️","구름조금":"🌤️","구름많음":"⛅","흐림":"☁️","비":"🌧️","눈":"🌨️","소나기":"🌦️","실내":"🏠"};
 const DIRS=["N","NE","E","SE","S","SW","W","NW"];
 const DIR_DEG={N:0,NE:45,E:90,SE:135,S:180,SW:225,W:270,NW:315};
+function degToCompass(deg){ const idx = Math.round(((deg%360)+360)%360/45)%8; return DIRS[idx]; }
 
-function generateMockData(lat,lng,dateStr,indoor){
-  const rng = hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_"+dateStr);
-  const base = 250+rng()*60, a1=70+rng()*40, a2=25+rng()*20;
-  const phase1=rng()*Math.PI*2, phase2=rng()*Math.PI*2;
-  const tidePoints=[];
-  for(let h=0;h<=24;h+=0.5){
-    const height = base + a1*Math.sin(2*Math.PI*h/12.4+phase1) + a2*Math.sin(2*Math.PI*h/12+phase2);
-    tidePoints.push({h,height});
+async function fetchWeatherItems(lat,lng){
+  const {nx,ny} = latLngToGrid(lat,lng);
+  const {baseDate, baseTime} = kmaBaseDateTime();
+  const url = `${API_BASE}/api/weather?base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const items = json && json.response && json.response.body && json.response.body.items && json.response.body.items.item;
+  if(!items || !Array.isArray(items)) throw new Error('no weather items');
+  return items;
+}
+
+function buildHoursFromWeather(items, dateStr){
+  const byHour = {};
+  items.forEach(it=>{
+    if(it.fcstDate !== dateStr) return;
+    const h = parseInt(it.fcstTime.slice(0,2), 10);
+    if(!byHour[h]) byHour[h] = {};
+    byHour[h][it.category] = it.fcstValue;
+  });
+  const hours = [];
+  for(let h=0; h<24; h++){
+    const row = byHour[h];
+    if(!row){ hours.push(null); continue; }
+    const ptyCode = row.PTY;
+    const skyCode = row.SKY;
+    const sky = (ptyCode && PTY_MAP[ptyCode]) ? PTY_MAP[ptyCode] : (SKY_MAP[skyCode] || '맑음');
+    const wave = row.WAV !== undefined ? parseFloat(row.WAV) : null;
+    const windSpeed = row.WSD !== undefined ? parseFloat(row.WSD) : null;
+    const windDeg = row.VEC !== undefined ? parseFloat(row.VEC) : null;
+    const temp = row.TMP !== undefined ? Math.round(parseFloat(row.TMP)) : null;
+    const precip = row.POP !== undefined ? parseInt(row.POP,10) : null;
+    const pcp = row.PCP;
+    let precipAmount = 0;
+    if(pcp && pcp !== '강수없음'){
+      const m = pcp.match(/[\d.]+/);
+      if(m) precipAmount = parseFloat(m[0]);
+    }
+    hours.push({ hour:h, wave, windSpeed, windDir: windDeg!==null ? degToCompass(windDeg) : null, windDeg, temp, sky, precip, precipAmount, isLive: true });
   }
+  return hours;
+}
+
+async function fetchTideTimeItems(obsCode, dateStr){
+  const url = `${API_BASE}/api/tideTime?obs_post_id=${obsCode}&date=${dateStr}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const items = json && json.body && json.body.items && json.body.items.item;
+  if(!items) throw new Error('no tide time items');
+  const list = Array.isArray(items) ? items : [items];
+  return list.map(it=>{
+    const parts = it.predcDt.split(' ');
+    const t = parts[1];
+    const hm = t.split(':').map(Number);
+    return { h: hm[0] + hm[1]/60, height: parseFloat(it.tdlvHgt) };
+  }).sort((a,b)=>a.h-b.h);
+}
+
+async function fetchTideExtremeItems(obsCode, dateStr){
+  const url = `${API_BASE}/api/tideExtreme?obs_post_id=${obsCode}&date=${dateStr}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const items = json && json.body && json.body.items && json.body.items.item;
+  if(!items) throw new Error('no tide extreme items');
+  const list = Array.isArray(items) ? items : [items];
+  const parsed = list.map(it=>{
+    const parts = it.predcDt.split(' ');
+    const t = parts[1];
+    const hm = t.split(':').map(Number);
+    return { h: hm[0] + hm[1]/60, height: parseFloat(it.predcTdlvVl) };
+  }).sort((a,b)=>a.h-b.h);
+  return parsed.map((p,i)=>{
+    let type;
+    if(i===0){ type = p.height < (parsed[1] ? parsed[1].height : p.height) ? '간조' : '만조'; }
+    else { type = p.height > parsed[i-1].height ? '만조' : '간조'; }
+    return { type, h:p.h, height: Math.round(p.height) };
+  });
+}
+
+function hashSeed(str){
+  let h = 1779033703 ^ str.length;
+  for (let i=0;i<str.length;i++){ h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h<<13)|(h>>>19); }
+  return function(){ h = Math.imul(h ^ (h>>>16), 2246822507); h = Math.imul(h ^ (h>>>13), 3266489909); h ^= h>>>16; return (h>>>0)/4294967296; };
+}
+function mockTide(lat,lng,dateStr){
+  const rng = hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_tide_"+dateStr);
+  const base=250+rng()*60, a1=70+rng()*40, a2=25+rng()*20, phase1=rng()*Math.PI*2, phase2=rng()*Math.PI*2;
+  const tidePoints=[];
+  for(let h=0;h<=24;h+=0.5){ tidePoints.push({h, height: base + a1*Math.sin(2*Math.PI*h/12.4+phase1) + a2*Math.sin(2*Math.PI*h/12+phase2)}); }
   const extremes=[];
   for(let i=1;i<tidePoints.length-1;i++){
-    const prev=tidePoints[i-1].height, cur=tidePoints[i].height, next=tidePoints[i+1].height;
-    if(cur>prev && cur>next) extremes.push({type:'만조', h:tidePoints[i].h, height:Math.round(cur)});
-    if(cur<prev && cur<next) extremes.push({type:'간조', h:tidePoints[i].h, height:Math.round(cur)});
+    const p=tidePoints[i-1].height,c=tidePoints[i].height,n=tidePoints[i+1].height;
+    if(c>p&&c>n) extremes.push({type:'만조',h:tidePoints[i].h,height:Math.round(c)});
+    if(c<p&&c<n) extremes.push({type:'간조',h:tidePoints[i].h,height:Math.round(c)});
   }
-  const windBase=2+rng()*6, waveBase=0.2+rng()*0.6, dirIdx=Math.floor(rng()*8);
-  const swellBase=0.3+rng()*0.9, swellPeriodBase=8+rng()*6, swellDirIdx=Math.floor(rng()*8);
-  const skyBias = Math.floor(rng()*4);
-  // sea surface temp: fairly stable across the day, seeded per location+date
-  const waterTempBase = 12 + rng()*15; // 12~27
-  const hours=[];
-  for(let h=0;h<24;h++){
-    const wobble = Math.sin(h/3+rng()*5)*0.5;
-    const wave = indoor?0:Math.max(0.1, +(waveBase+wobble*0.35+(rng()-0.5)*0.15).toFixed(1));
-    const swell = indoor?0:Math.max(0.1, +(swellBase+Math.sin(h/6+rng()*4)*0.15).toFixed(1));
-    const swellPeriod = indoor?0:Math.round(swellPeriodBase + (rng()-0.5)*2);
-    const windSpeed = indoor?0:Math.max(0.5, +(windBase+wobble*1.5+(rng()-0.5)*1.5).toFixed(1));
-    const currentVal = indoor?0:Math.round(5+Math.abs(Math.sin((h/12.4)*Math.PI*2))*35);
-    const tideNow = (tidePoints.find(p=>p.h===h)||{height:base}).height;
-    const temp = indoor?27:Math.round(18+6*Math.sin(((h-6)/24)*Math.PI*2)+rng()*2);
-    const waterTemp = indoor?28:+(waterTempBase + Math.sin(h/24*Math.PI*2)*0.4).toFixed(1);
-    const sky = indoor?"실내":SKY[Math.min(skyBias + (rng()>0.85?1:0), 3)];
-    const precip = indoor?0:Math.round(rng()*30);
-    const precipAmount = indoor?0: precip>60?+(1+rng()*7).toFixed(1): precip>25?+(rng()*2).toFixed(1):0;
-    hours.push({
-      hour:h, wave, swell, swellPeriod, swellDir:DIRS[(swellDirIdx+Math.floor(h/6))%8],
-      windSpeed, windDir:DIRS[(dirIdx+Math.floor(h/4))%8],
-      current:currentVal, tide:Math.round(tideNow), temp, waterTemp, sky, precip, precipAmount, indoor
-    });
-  }
-  return { hours, tidePoints, extremes, indoor };
+  return {tidePoints, extremes};
 }
+function mockWeatherHour(lat,lng,dateStr,h){
+  const rng = hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_wx_"+dateStr+"_"+h);
+  const wobble = Math.sin(h/3+rng()*5)*0.5;
+  return {
+    hour:h,
+    wave: Math.max(0.1, +(0.4+wobble*0.35+(rng()-0.5)*0.2).toFixed(1)),
+    windSpeed: Math.max(0.5, +(4+wobble*1.5+(rng()-0.5)*1.5).toFixed(1)),
+    windDeg: rng()*360,
+    windDir: DIRS[Math.floor(rng()*8)],
+    temp: Math.round(18+6*Math.sin(((h-6)/24)*Math.PI*2)+rng()*2),
+    sky: ["맑음","구름많음","흐림"][Math.floor(rng()*3)],
+    precip: Math.round(rng()*20),
+    precipAmount: 0,
+    isLive: false
+  };
+}
+function mockExtra(lat,lng,dateStr,h){
+  const rng = hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_extra_"+dateStr+"_"+h);
+  const waterTempBase = 12+hashSeed(lat.toFixed(3)+","+lng.toFixed(3)+"_wt_"+dateStr)()*15;
+  return {
+    swell: Math.max(0.1, +(0.4+rng()*0.6).toFixed(1)),
+    swellPeriod: Math.round(8+rng()*6),
+    swellDir: DIRS[Math.floor(rng()*8)],
+    current: Math.round(5+Math.abs(Math.sin((h/12.4)*Math.PI*2))*35),
+    waterTemp: +(waterTempBase + Math.sin(h/24*Math.PI*2)*0.4).toFixed(1)
+  };
+}
+
 function hourScore(row){
   if(row.sky==="실내") return 95;
+  if(row.missing) return null;
   let s=100;
   s -= row.wave>1?30:row.wave>0.5?12:0;
   s -= row.swell>1.5?20:row.swell>0.8?8:0;
@@ -331,102 +426,157 @@ function hourScore(row){
 }
 function scoreColor(s){ return s>=75?C.teal : s>=50?C.amber : C.coral; }
 
+async function loadAndRender(loc){
+  const dateStr = currentDateStr();
+  const el = document.getElementById('results');
+  el.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
+
+  if(loc.indoor){
+    renderFinal(loc, buildIndoorHours(), {tidePoints:[], extremes:[]}, false, true, dateStr);
+    return;
+  }
+
+  let weatherItems = null, weatherLive = false;
+  try{ weatherItems = await fetchWeatherItems(loc.lat, loc.lng); weatherLive = true; }catch(e){ weatherLive = false; }
+
+  let hours;
+  if(weatherLive){
+    hours = buildHoursFromWeather(weatherItems, dateStr);
+    if(hours.every(function(h){return h===null;})) weatherLive = false;
+  }
+  if(!weatherLive){
+    hours = [];
+    for(let h=0;h<24;h++) hours.push(mockWeatherHour(loc.lat, loc.lng, dateStr, h));
+  } else {
+    // don't backfill individual missing hours with unrelated mock noise (e.g. past hours of "today"
+    // that KMA can't forecast) — leave them as an explicit "no data" row instead
+    hours = hours.map(function(h,i){
+      return h || { hour:i, wave:null, windSpeed:null, windDir:null, windDeg:null, temp:null, sky:null, precip:null, precipAmount:0, isLive:false, missing:true };
+    });
+  }
+  hours = hours.map(function(h){ return Object.assign({}, h, mockExtra(loc.lat, loc.lng, dateStr, h.hour)); });
+
+  let tideData = null, tideLive = false;
+  if(loc.obsCode){
+    try{
+      const results = await Promise.all([
+        fetchTideTimeItems(loc.obsCode, dateStr),
+        fetchTideExtremeItems(loc.obsCode, dateStr)
+      ]);
+      const tidePoints = results[0], extremes = results[1];
+      if(tidePoints.length>0){ tideData = {tidePoints:tidePoints, extremes:extremes}; tideLive = true; }
+    }catch(e){ tideLive = false; }
+  }
+  if(!tideLive){ tideData = mockTide(loc.lat, loc.lng, dateStr); }
+
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr);
+}
+
+function buildIndoorHours(){
+  const hours = [];
+  for(let h=0;h<24;h++){
+    hours.push({hour:h, wave:0, windSpeed:0, windDir:null, windDeg:null, temp:27, sky:'실내', precip:0, precipAmount:0, swell:0, swellPeriod:0, swellDir:'N', current:0, waterTemp:28, isLive:false});
+  }
+  return hours;
+}
+
 function renderTideSVG(tidePoints, extremes, indoor){
-  if(indoor) return '<div class="placeholder">실내 시설이라 조위 데이터가 없어요.</div>';
+  if(indoor || !tidePoints || tidePoints.length===0) return '<div class="placeholder">조위 데이터가 없어요.</div>';
   const W=760,H=190,padX=34,padY=22;
-  const heights=tidePoints.map(p=>p.height);
-  const min=Math.min(...heights), max=Math.max(...heights);
-  const xOf=h=>padX+(h/24)*(W-padX*2);
-  const yOf=v=>H-padY-((v-min)/((max-min)||1))*(H-padY*2);
-  const path = tidePoints.map((p,i)=>`${i===0?'M':'L'} ${xOf(p.h)} ${yOf(p.height)}`).join(' ');
-  const area = `${path} L ${xOf(24)} ${H-padY} L ${xOf(0)} ${H-padY} Z`;
+  const heights=tidePoints.map(function(p){return p.height;});
+  const min=Math.min.apply(null,heights), max=Math.max.apply(null,heights);
+  const xOf=function(h){ return padX+(h/24)*(W-padX*2); };
+  const yOf=function(v){ return H-padY-((v-min)/((max-min)||1))*(H-padY*2); };
+  const path = tidePoints.map(function(p,i){ return (i===0?'M':'L')+' '+xOf(p.h)+' '+yOf(p.height); }).join(' ');
+  const area = path+' L '+xOf(tidePoints[tidePoints.length-1].h)+' '+(H-padY)+' L '+xOf(tidePoints[0].h)+' '+(H-padY)+' Z';
   const nowHour = new Date().getHours();
   let axisG='';
   for(let h=0; h<=24; h+=2){
-    axisG += `<line x1="${xOf(h)}" y1="${padY}" x2="${xOf(h)}" y2="${H-padY}" stroke="#1E4E68" stroke-width="1"/>`;
-    axisG += `<text x="${xOf(h)}" y="${H-6}" font-size="9" fill="#9FC1CB" text-anchor="middle">${h}시</text>`;
+    axisG += '<line x1="'+xOf(h)+'" y1="'+padY+'" x2="'+xOf(h)+'" y2="'+(H-padY)+'" stroke="#1E4E68" stroke-width="1"/>';
+    axisG += '<text x="'+xOf(h)+'" y="'+(H-6)+'" font-size="9" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
   }
   let extG='';
-  extremes.forEach(e=>{
+  (extremes||[]).forEach(function(e){
     const col = e.type==='만조'?C.coral:C.amber;
     const m = (e.height/100).toFixed(2)+'m';
-    extG += `<circle cx="${xOf(e.h)}" cy="${yOf(e.height)}" r="3.5" fill="${col}"/>`;
-    extG += `<text x="${xOf(e.h)}" y="${yOf(e.height)-8}" font-size="9" fill="#E7F3F5" text-anchor="middle">${e.type} ${m}</text>`;
-    extG += `<text x="${xOf(e.h)}" y="${yOf(e.height)+15}" font-size="8" fill="#9FC1CB" text-anchor="middle">${Math.floor(e.h)}:${e.h%1?'30':'00'}</text>`;
+    extG += '<circle cx="'+xOf(e.h)+'" cy="'+yOf(e.height)+'" r="3.5" fill="'+col+'"/>';
+    extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)-8)+'" font-size="9" fill="#E7F3F5" text-anchor="middle">'+e.type+' '+m+'</text>';
+    extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)+15)+'" font-size="8" fill="#9FC1CB" text-anchor="middle">'+Math.floor(e.h)+':'+String(Math.round((e.h%1)*60)).padStart(2,'0')+'</text>';
   });
   const maxLabel = (max/100).toFixed(2)+'m', minLabel=(min/100).toFixed(2)+'m';
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%">
-    <defs><linearGradient id="tf" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${C.teal}" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="${C.teal}" stop-opacity="0"/>
-    </linearGradient></defs>
-    ${axisG}
-    <text x="${padX}" y="${yOf(max)-4>padY?yOf(max)-4:padY+8}" font-size="8" fill="#9FC1CB">${maxLabel}</text>
-    <text x="${padX}" y="${H-padY-2}" font-size="8" fill="#9FC1CB">${minLabel}</text>
-    <path d="${area}" fill="url(#tf)"/>
-    <path d="${path}" fill="none" stroke="${C.teal}" stroke-width="2"/>
-    ${extG}
-    <line x1="${xOf(nowHour)}" y1="${padY}" x2="${xOf(nowHour)}" y2="${H-padY}" stroke="#E7F3F5" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
-  </svg>`;
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%">'+
+    '<defs><linearGradient id="tf" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0%" stop-color="'+C.teal+'" stop-opacity="0.35"/>'+
+    '<stop offset="100%" stop-color="'+C.teal+'" stop-opacity="0"/>'+
+    '</linearGradient></defs>'+
+    axisG+
+    '<text x="'+padX+'" y="'+(yOf(max)-4>padY?yOf(max)-4:padY+8)+'" font-size="8" fill="#9FC1CB">'+maxLabel+'</text>'+
+    '<text x="'+padX+'" y="'+(H-padY-2)+'" font-size="8" fill="#9FC1CB">'+minLabel+'</text>'+
+    '<path d="'+area+'" fill="url(#tf)"/>'+
+    '<path d="'+path+'" fill="none" stroke="'+C.teal+'" stroke-width="2"/>'+
+    extG+
+    '<line x1="'+xOf(nowHour)+'" y1="'+padY+'" x2="'+xOf(nowHour)+'" y2="'+(H-padY)+'" stroke="#E7F3F5" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>'+
+    '</svg>';
 }
 
-function renderTable(hours){
-  const twoHourly = hours.filter(h=>h.hour%2===0);
-  let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(h=>`<th>${h.hour}시</th>`).join('') + '</tr>';
-  let scoreRow = '<tr><td class="row-label">적합도</td>' + twoHourly.map(h=>{
-    const s = hourScore(h);
-    return `<td><span class="dot" style="background:${scoreColor(s)}" title="${s}점"></span></td>`;
+function renderTable(hours, indoor){
+  const twoHourly = hours.filter(function(h){ return h.hour%2===0; });
+  let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
+  let scoreRow = '<tr><td class="row-label">적합도</td>' + twoHourly.map(function(h){
+    const s = hourScore(indoor?{sky:'실내'}:h);
+    if(s===null) return '<td style="color:var(--foamDim)">-</td>';
+    return '<td><span class="dot" style="background:'+scoreColor(s)+'" title="'+s+'점"></span></td>';
   }).join('') + '</tr>';
-  let waveRow = '<tr><td class="row-label">풍랑(파고)</td>' + twoHourly.map(h=>`<td>${h.indoor?'-':h.wave+'m'}</td>`).join('') + '</tr>';
-  let swellRow = '<tr><td class="row-label">너울</td>' + twoHourly.map(h=>{
-    if(h.indoor) return '<td>-</td>';
-    return `<td>${h.swell}m<span class="sub">${h.swellPeriod}s ${h.swellDir}</span></td>`;
+  let waveRow = '<tr><td class="row-label">풍랑(파고)</td>' + twoHourly.map(function(h){ return '<td>'+(indoor?'-':(h.wave!==null?h.wave+'m':'-'))+'</td>'; }).join('') + '</tr>';
+  let swellRow = '<tr><td class="row-label">너울</td>' + twoHourly.map(function(h){
+    if(indoor) return '<td>-</td>';
+    return '<td>'+h.swell+'m<span class="sub">'+h.swellPeriod+'s '+h.swellDir+'</span></td>';
   }).join('') + '</tr>';
-  let windRow = '<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(h=>{
-    if(h.indoor) return '<td>-</td>';
-    const deg = DIR_DEG[h.windDir]||0;
-    return `<td><span class="wind-cell"><span class="arrow" style="transform:rotate(${deg}deg)">↑</span>${h.windSpeed}m/s</span></td>`;
+  let windRow = '<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(function(h){
+    if(indoor || h.windSpeed===null) return '<td>-</td>';
+    const deg = h.windDeg!==null ? h.windDeg : (DIR_DEG[h.windDir]||0);
+    return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+h.windSpeed+'m/s</span></td>';
   }).join('') + '</tr>';
-  let currentRow = '<tr><td class="row-label">조류</td>' + twoHourly.map(h=>`<td>${h.indoor?'-':h.current+'cm/s'}</td>`).join('') + '</tr>';
-  let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(h=>`<td>${h.waterTemp}℃</td>`).join('') + '</tr>';
-  let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(h=>`<td>${h.temp}℃</td>`).join('') + '</tr>';
-  let skyRow = '<tr><td class="row-label">하늘</td>' + twoHourly.map(h=>`<td><span class="sky-icon">${SKY_ICON[h.sky]||''}</span></td>`).join('') + '</tr>';
-  let precipRow = '<tr><td class="row-label">강수</td>' + twoHourly.map(h=>{
-    if(h.indoor) return '<td>-</td>';
-    return `<td>${h.precip}%<span class="sub">${h.precipAmount>0?h.precipAmount+'mm':'-'}</span></td>`;
+  let currentRow = '<tr><td class="row-label">조류</td>' + twoHourly.map(function(h){ return '<td>'+(indoor?'-':h.current+'cm/s')+'</td>'; }).join('') + '</tr>';
+  let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(function(h){ return '<td>'+h.waterTemp+'℃</td>'; }).join('') + '</tr>';
+  let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(function(h){ return '<td>'+(h.temp!==null?h.temp+'℃':'-')+'</td>'; }).join('') + '</tr>';
+  let skyRow = '<tr><td class="row-label">하늘</td>' + twoHourly.map(function(h){ return '<td><span class="sky-icon">'+(h.sky ? (SKY_ICON[h.sky]||h.sky) : '-')+'</span></td>'; }).join('') + '</tr>';
+  let precipRow = '<tr><td class="row-label">강수</td>' + twoHourly.map(function(h){
+    if(indoor) return '<td>-</td>';
+    return '<td>'+(h.precip!==null?h.precip+'%':'-')+'<span class="sub">'+(h.precipAmount>0?h.precipAmount+'mm':'-')+'</span></td>';
   }).join('') + '</tr>';
-  return `<div class="table-wrap"><table><thead>${head}</thead><tbody>${scoreRow}${waveRow}${swellRow}${windRow}${currentRow}${waterTempRow}${tempRow}${skyRow}${precipRow}</tbody></table></div>
-  <div class="legend">
-    <span><span class="dot" style="background:${C.teal}"></span>우수</span>
-    <span><span class="dot" style="background:${C.amber}"></span>보통</span>
-    <span><span class="dot" style="background:${C.coral}"></span>주의</span>
-  </div>`;
+  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+scoreRow+waveRow+swellRow+windRow+currentRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
+  '<div class="legend">'+
+    '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
+    '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
+    '<span><span class="dot" style="background:'+C.coral+'"></span>주의</span>'+
+    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 너울·조류·수온은 <b style="color:'+C.amber+'">추정치</b></span>'+
+  '</div>';
 }
 
-function renderResults(name, lat, lng, dateStr, indoor){
-  const data = generateMockData(lat, lng, dateStr, !!indoor);
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr){
   const el = document.getElementById('results');
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-head">
-        <h3>${name} · 조위(물높이) 그래프</h3>
-        <span class="meta">${lat.toFixed(4)}, ${lng.toFixed(4)} · ${dateStr}</span>
-      </div>
-      ${renderTideSVG(data.tidePoints, data.extremes, data.indoor)}
-    </div>
-    <div class="card">
-      <div class="card-head"><h3>시간대별 상세 (2시간 단위)</h3></div>
-      ${renderTable(data.hours)}
-    </div>
-  `;
+  el.innerHTML =
+    '<div class="card">'+
+      '<div class="card-head">'+
+        '<h3>'+loc.name+' · 조위(물높이) 그래프</h3>'+
+        '<span class="meta">'+loc.lat.toFixed(4)+', '+loc.lng.toFixed(4)+' · '+dateStr+
+          ' <span class="badge '+(tideLive?'live':'mock')+'">'+(loc.indoor? '실내' : (tideLive?'●실시간':'●추정'))+'</span>'+
+        '</span>'+
+      '</div>'+
+      renderTideSVG(tideData.tidePoints, tideData.extremes, loc.indoor)+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-head">'+
+        '<h3>시간대별 상세 (2시간 단위)</h3>'+
+        '<span class="badge '+(weatherLive?'live':'mock')+'">'+(loc.indoor? '실내' : (weatherLive?'●기상청 실시간':'●추정'))+'</span>'+
+      '</div>'+
+      renderTable(hours, loc.indoor)+
+    '</div>';
 }
 
-// ---- map ----
 const map = L.map('map', {zoomControl:true}).setView([36.5,127.8], 7);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors',
-  maxZoom: 18
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors', maxZoom: 18 }).addTo(map);
 
 let marker = null;
 function setMarker(lat,lng,label){
@@ -434,141 +584,116 @@ function setMarker(lat,lng,label){
   marker = L.marker([lat,lng]).addTo(map).bindPopup(label).openPopup();
   map.flyTo([lat,lng], 11);
 }
-
 function currentDateStr(){
   const input = document.getElementById('dateInput');
-  return input.value || new Date().toISOString().slice(0,10);
+  return (input.value || new Date().toISOString().slice(0,10)).replace(/-/g,'');
 }
 
-// ---- local DB search ----
-function searchLocalDB(query){
-  const q = query.trim().toLowerCase();
-  if(!q) return [];
-  return LOCATIONS_DB.filter(l =>
-    l.name.toLowerCase().includes(q) ||
-    (l.aliases||[]).some(a=>a.toLowerCase().includes(q)) ||
-    (l.type||'').toLowerCase().includes(q)
-  ).slice(0,6);
+const kakaoGeocoder = (typeof kakao !== 'undefined' && kakao.maps && kakao.maps.services) ? new kakao.maps.services.Geocoder() : null;
+const kakaoPlaces = (typeof kakao !== 'undefined' && kakao.maps && kakao.maps.services) ? new kakao.maps.services.Places() : null;
+
+function reverseGeocode(lat,lng){
+  if(!kakaoGeocoder){ selectLocation({name: lat.toFixed(4)+', '+lng.toFixed(4), lat: lat, lng: lng, indoor:false}); return; }
+  kakaoGeocoder.coord2Address(lng, lat, function(result, status){
+    let name = lat.toFixed(4)+', '+lng.toFixed(4);
+    if(status === kakao.maps.services.Status.OK && result[0]){
+      const r = result[0];
+      if(r.address){
+        name = [r.address.region_1depth_name, r.address.region_2depth_name, r.address.region_3depth_name].filter(Boolean).join(' ');
+      } else if(r.road_address){
+        name = r.road_address.address_name;
+      }
+    }
+    selectLocation({name:name, lat:lat, lng:lng, indoor:false});
+  });
+}
+map.on('click', function(e){ reverseGeocode(e.latlng.lat, e.latlng.lng); });
+
+function kakaoSearch(query){
+  return new Promise(function(resolve){
+    if(!kakaoPlaces){ resolve([]); return; }
+    kakaoPlaces.keywordSearch(query, function(data, status){
+      if(status === kakao.maps.services.Status.OK){
+        resolve(data.map(function(d){ return { name: d.place_name, address: d.road_address_name || d.address_name || '', lat: parseFloat(d.y), lng: parseFloat(d.x) }; }));
+      } else { resolve([]); }
+    });
+  });
 }
 
-async function reverseGeocode(lat,lng){
-  try{
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ko`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const name = json.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    selectLocation({name, lat, lng, indoor:false});
-  }catch(err){
-    selectLocation({name:`${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, indoor:false});
-  }
-}
-map.on('click', (e)=>{ reverseGeocode(e.latlng.lat, e.latlng.lng); });
-
-async function nominatimSearch(query){
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=kr&accept-language=ko&q=${encodeURIComponent(query)}`;
-  const res = await fetch(url);
-  return res.json();
-}
-
-// ---- search + autocomplete (local DB first, live geocoding as fallback) ----
 const searchInput = document.getElementById('searchInput');
 const suggestBox = document.getElementById('suggestBox');
 const searchStatus = document.getElementById('searchStatus');
-let debounceTimer = null;
-let requestToken = 0;
+let debounceTimer = null, requestToken = 0;
 
 function hideSuggest(){ suggestBox.style.display='none'; suggestBox.innerHTML=''; }
-
+function searchLocalDB(query){
+  const q = query.trim().toLowerCase();
+  if(!q) return [];
+  return LOCATIONS_DB.filter(function(l){
+    return l.name.toLowerCase().indexOf(q)>-1 || (l.aliases||[]).some(function(a){ return a.toLowerCase().indexOf(q)>-1; }) || (l.type||'').toLowerCase().indexOf(q)>-1;
+  }).slice(0,6);
+}
 function showLocalSuggestions(matches){
   suggestBox.innerHTML = '';
-  matches.forEach(l=>{
+  matches.forEach(function(l){
     const b = document.createElement('button');
-    b.innerHTML = `<span>${l.name}</span><span class="tag">${l.type||''}</span>`;
-    b.addEventListener('click', ()=>{
-      searchInput.value = l.name;
-      hideSuggest();
-      selectLocation(l);
-      searchStatus.textContent = '';
-    });
+    b.innerHTML = '<span>'+l.name+'</span><span class="tag">'+(l.type||'')+'</span>';
+    b.addEventListener('click', function(){ searchInput.value = l.name; hideSuggest(); selectLocation(l); searchStatus.textContent = ''; });
     suggestBox.appendChild(b);
   });
   suggestBox.style.display = matches.length ? 'block' : 'none';
 }
-
 async function runSearch(query){
   if(!query) return;
   hideSuggest();
   const local = searchLocalDB(query);
-  if(local.length>0){
-    selectLocation(local[0]);
-    searchStatus.textContent = '';
-    return;
-  }
-  searchStatus.textContent = '내부 DB에 없어 실시간 검색 중...';
+  if(local.length>0){ selectLocation(local[0]); searchStatus.textContent = ''; return; }
+  searchStatus.textContent = '내부 DB에 없어 카카오맵으로 검색 중...';
   try{
-    const results = await nominatimSearch(query);
+    const results = await kakaoSearch(query);
     if(results && results.length>0){
       const r = results[0];
-      const name = r.display_name.split(',').slice(0,2).join(',');
-      selectLocation({name, lat:parseFloat(r.lat), lng:parseFloat(r.lon), indoor:false});
+      selectLocation({name:r.name, lat:r.lat, lng:r.lng, indoor:false});
       searchStatus.textContent = '';
-    } else {
-      searchStatus.textContent = '검색 결과가 없어요. 지도를 직접 클릭해서 위치를 찍어주세요.';
-    }
-  }catch(err){
-    searchStatus.textContent = '실시간 검색이 막혀있어요 (이 환경 제약). 지도를 클릭해서 위치를 찍어주세요.';
-  }
+    } else { searchStatus.textContent = '검색 결과가 없어요. 지도를 직접 클릭해서 위치를 찍어주세요.'; }
+  }catch(err){ searchStatus.textContent = '검색 중 오류가 발생했어요. 지도를 클릭해서 위치를 찍어주세요.'; }
 }
-
-searchInput.addEventListener('input', ()=>{
+searchInput.addEventListener('input', function(){
   clearTimeout(debounceTimer);
   const q = searchInput.value.trim();
   if(!q){ hideSuggest(); return; }
   const local = searchLocalDB(q);
   if(local.length>0){ showLocalSuggestions(local); return; }
   hideSuggest();
-  debounceTimer = setTimeout(async ()=>{
+  debounceTimer = setTimeout(async function(){
     const myToken = ++requestToken;
     try{
-      const results = await nominatimSearch(q);
+      const results = await kakaoSearch(q);
       if(myToken !== requestToken) return;
       if(!results || results.length===0){ return; }
       suggestBox.innerHTML = '';
-      results.forEach(r=>{
+      results.forEach(function(r){
         const b = document.createElement('button');
-        b.innerHTML = `<span>${r.display_name}</span><span class="tag">실시간</span>`;
-        b.addEventListener('click', ()=>{
-          searchInput.value = r.display_name.split(',')[0];
-          hideSuggest();
-          selectLocation({name:r.display_name.split(',').slice(0,2).join(','), lat:parseFloat(r.lat), lng:parseFloat(r.lon), indoor:false});
-          searchStatus.textContent = '';
-        });
+        b.innerHTML = '<span>'+r.name+'</span><span class="tag">'+(r.address ? r.address.split(' ').slice(0,2).join(' ') : '카카오맵')+'</span>';
+        b.addEventListener('click', function(){ searchInput.value = r.name; hideSuggest(); selectLocation({name:r.name, lat:r.lat, lng:r.lng, indoor:false}); searchStatus.textContent=''; });
         suggestBox.appendChild(b);
       });
       suggestBox.style.display='block';
-    }catch(e){ /* silent: live geocoding may be blocked in this sandbox */ }
-  }, 450);
+    }catch(e){}
+  }, 350);
 });
-document.addEventListener('click', (e)=>{
-  if(!document.querySelector('.search-box').contains(e.target)) hideSuggest();
-});
-
-document.getElementById('searchBtn').addEventListener('click', ()=>runSearch(searchInput.value.trim()));
-searchInput.addEventListener('keydown', (e)=>{
-  if(e.key==='Enter'){ e.preventDefault(); runSearch(searchInput.value.trim()); }
-});
+document.addEventListener('click', function(e){ if(!document.querySelector('.search-box').contains(e.target)) hideSuggest(); });
+document.getElementById('searchBtn').addEventListener('click', function(){ runSearch(searchInput.value.trim()); });
+searchInput.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); runSearch(searchInput.value.trim()); } });
 document.getElementById('favToggle').addEventListener('click', toggleFavorite);
-document.getElementById('dateInput').addEventListener('change', ()=>{
-  if(currentLoc) renderResults(currentLoc.name, currentLoc.lat, currentLoc.lng, currentDateStr(), !!currentLoc.indoor);
-});
+document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc) loadAndRender(currentLoc); });
 
-// ---- init ----
 (async function init(){
   document.getElementById('dateInput').value = new Date().toISOString().slice(0,10);
   await loadStorage();
   renderRecent();
   renderFavorites();
-  const sample = DEFAULT_FAVORITES[3]; // 하조대해변
+  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 갈남항'; }) || DEFAULT_FAVORITES[3];
   selectLocation(sample);
 })();
 </script>
