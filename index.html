@@ -360,7 +360,7 @@ async function fetchSunTimes(lat, lng, dateStr){
   const res = await fetch(url);
   const json = await res.json();
   if(!json || !json.sunrise || !json.sunset) throw new Error('no suntimes');
-  const fmt = function(t){ return (t && t.length===4) ? t.slice(0,2)+':'+t.slice(2,4) : t; };
+  const fmt = function(t){ if(!t) return t; t = t.trim(); return (t.length===4) ? t.slice(0,2)+':'+t.slice(2,4) : t; };
   return { sunrise: fmt(json.sunrise), sunset: fmt(json.sunset) };
 }
 
