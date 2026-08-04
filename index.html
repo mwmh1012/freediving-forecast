@@ -613,18 +613,25 @@ function haversine(lat1,lng1,lat2,lng2){
   const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
-function nearestLocationName(lat,lng){
+function nearestLocationInfo(lat,lng){
   let best=null, bestDist=Infinity;
   LOCATIONS_DB.forEach(function(l){
     const d = haversine(lat,lng,l.lat,l.lng);
     if(d<bestDist){ bestDist=d; best=l; }
   });
-  if(best) return best.name + ' 인근 해상 (약 ' + bestDist.toFixed(1) + 'km)';
-  return null;
+  return best ? { name: best.name, dist: bestDist } : null;
 }
 
 function reverseGeocode(lat,lng){
-  if(!kakaoGeocoder){ selectLocation({name: nearestLocationName(lat,lng) || (lat.toFixed(4)+', '+lng.toFixed(4)), lat: lat, lng: lng, indoor:false}); return; }
+  const nearest = nearestLocationInfo(lat,lng);
+  const nearSuffix = (nearest && nearest.dist > 0.3 && nearest.dist < 10)
+    ? ' (근처: ' + nearest.name + ', 약 ' + nearest.dist.toFixed(1) + 'km)'
+    : '';
+  if(!kakaoGeocoder){
+    const fallback = nearest ? (nearest.name + ' 인근 해상 (약 ' + nearest.dist.toFixed(1) + 'km)') : (lat.toFixed(4)+', '+lng.toFixed(4));
+    selectLocation({name: fallback, lat: lat, lng: lng, indoor:false});
+    return;
+  }
   kakaoGeocoder.coord2Address(lng, lat, function(result, status){
     let name = null;
     if(status === kakao.maps.services.Status.OK && result[0]){
@@ -635,7 +642,11 @@ function reverseGeocode(lat,lng){
         name = r.road_address.address_name;
       }
     }
-    if(!name){ name = nearestLocationName(lat,lng) || (lat.toFixed(4)+', '+lng.toFixed(4)); }
+    if(!name){
+      name = nearest ? (nearest.name + ' 인근 해상 (약 ' + nearest.dist.toFixed(1) + 'km)') : (lat.toFixed(4)+', '+lng.toFixed(4));
+    } else {
+      name = name + nearSuffix;
+    }
     selectLocation({name:name, lat:lat, lng:lng, indoor:false});
   });
 }
