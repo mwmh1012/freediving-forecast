@@ -207,6 +207,26 @@ LOCATIONS_DB.forEach(function(l){
   else if(l.name.indexOf('여수')>-1 || l.name.indexOf('고흥')>-1) l.areaCode='S1321000';
   else if(l.name.indexOf('제주')>-1) l.areaCode='S1323000';
   else if(l.name.indexOf('인천')>-1) l.areaCode='S1251200';
+
+  if(l.name.indexOf('울릉도')>-1) l.landAreaCode='L1072100';
+  else if(l.name.indexOf('삼척')>-1) l.landAreaCode='L1022000';
+  else if(l.name.indexOf('속초')>-1) l.landAreaCode='L1022100';
+  else if(l.name.indexOf('양양')>-1 || l.name.indexOf('하조대')>-1) l.landAreaCode='L1022300';
+  else if(l.name.indexOf('강릉')>-1) l.landAreaCode='L1022500';
+  else if(l.name.indexOf('고성')>-1) l.landAreaCode='L1022200';
+  else if(l.name.indexOf('동해')>-1) l.landAreaCode='L1022500';
+  else if(l.name.indexOf('울진')>-1) l.landAreaCode='L1073000';
+  else if(l.name.indexOf('포항')>-1) l.landAreaCode='L1072400';
+  else if(l.name.indexOf('영덕')>-1) l.landAreaCode='L1072400';
+  else if(l.name.indexOf('부산')>-1) l.landAreaCode='L1150000';
+  else if(l.name.indexOf('통영')>-1) l.landAreaCode='L1082000';
+  else if(l.name.indexOf('여수')>-1) l.landAreaCode='L1051000';
+  else if(l.name.indexOf('고흥')>-1) l.landAreaCode='L1053100';
+  else if(l.name.indexOf('신안')>-1) l.landAreaCode='L1052200';
+  else if(l.name.indexOf('서귀포')>-1) l.landAreaCode='L1091400';
+  else if(l.name.indexOf('제주')>-1) l.landAreaCode='L1091300';
+  else if(l.name.indexOf('강화')>-1) l.landAreaCode='L1010900';
+  else if(l.name.indexOf('인천')>-1) l.landAreaCode='L1110100';
 });
 
 const DEFAULT_FAVORITES = [
@@ -568,7 +588,10 @@ async function loadAndRender(loc){
 
   let warnings = [];
   if(loc.areaCode){
-    try{ warnings = await fetchWarnings(loc.areaCode); }catch(e){ warnings = []; }
+    try{ warnings = warnings.concat(await fetchWarnings(loc.areaCode)); }catch(e){}
+  }
+  if(loc.landAreaCode){
+    try{ warnings = warnings.concat(await fetchWarnings(loc.landAreaCode)); }catch(e){}
   }
 
   renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings);
