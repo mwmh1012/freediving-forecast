@@ -54,10 +54,10 @@
   .legend{display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--foamDim);flex-wrap:wrap;}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;}
   .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;}
-  table{border-collapse:collapse;width:100%;font-size:11.5px;table-layout:fixed;}
+  table{border-collapse:collapse;width:100%;min-width:820px;font-size:11.5px;table-layout:auto;}
   th,td{padding:7px 5px;text-align:center;font-family:ui-monospace,monospace;}
   thead th{background:var(--panel2);color:var(--foam);}
-  th.row-label,td.row-label{text-align:left;font-family:-apple-system,sans-serif;color:var(--foamDim);background:var(--panel);width:82px;}
+  th.row-label,td.row-label{text-align:left;font-family:-apple-system,sans-serif;color:var(--foamDim);background:var(--panel);width:104px;}
   thead th.row-label{background:var(--panel2);}
   tbody td{color:var(--foam);background:var(--panel);}
   .sub{display:block;font-size:9px;color:var(--foamDim);margin-top:1px;}
@@ -132,6 +132,7 @@
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
     조회 날짜가 기상청 단기예보 제공 범위(대략 오늘부터 2~3일)를 벗어나면 자동으로 추정치로 대체돼요.
+    화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장 강사·버디의 판단이 우선입니다.
   </div>
 </div>
 
@@ -541,12 +542,14 @@ function renderTideSVG(tidePoints, extremes, indoor){
   let extG='';
   (extremes||[]).forEach(function(e){
     const col = e.type==='만조'?C.coral:C.amber;
-    const m = (e.height/100).toFixed(2)+'m';
+    const val = e.height/100;
+    const m = (val>=0?'+':'')+val.toFixed(2)+'m';
     extG += '<circle cx="'+xOf(e.h)+'" cy="'+yOf(e.height)+'" r="3.5" fill="'+col+'"/>';
     extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)-8)+'" font-size="9" fill="#E7F3F5" text-anchor="middle">'+e.type+' '+m+'</text>';
     extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)+15)+'" font-size="8" fill="#9FC1CB" text-anchor="middle">'+Math.floor(e.h)+':'+String(Math.round((e.h%1)*60)).padStart(2,'0')+'</text>';
   });
-  const maxLabel = (max/100).toFixed(2)+'m', minLabel=(min/100).toFixed(2)+'m';
+  const maxVal = max/100, minVal = min/100;
+  const maxLabel = (maxVal>=0?'+':'')+maxVal.toFixed(2)+'m', minLabel=(minVal>=0?'+':'')+minVal.toFixed(2)+'m';
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%">'+
     '<defs><linearGradient id="tf" x1="0" y1="0" x2="0" y2="1">'+
     '<stop offset="0%" stop-color="'+C.teal+'" stop-opacity="0.35"/>'+
@@ -562,6 +565,87 @@ function renderTideSVG(tidePoints, extremes, indoor){
     '</svg>';
 }
 
+function formatDateDisplay(dateStr){
+  return dateStr.slice(0,4) + '.' + dateStr.slice(4,6) + '.' + dateStr.slice(6,8);
+}
+
+function catmullRomPath(pts){
+  let d = 'M '+pts[0].x+' '+pts[0].y;
+  for(let i=0;i<pts.length-1;i++){
+    const p0 = pts[i-1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i+1];
+    const p3 = pts[i+2] || p2;
+    const cp1x = p1.x + (p2.x - p0.x)/6;
+    const cp1y = p1.y + (p2.y - p0.y)/6;
+    const cp2x = p2.x - (p3.x - p1.x)/6;
+    const cp2y = p2.y - (p3.y - p1.y)/6;
+    d += ' C '+cp1x+' '+cp1y+' '+cp2x+' '+cp2y+' '+p2.x+' '+p2.y;
+  }
+  return d;
+}
+
+function renderWaveSVG(hours, indoor){
+  if(indoor) return '<div class="placeholder">실내라 파고 데이터가 없어요.</div>';
+  const valid = hours.filter(function(h){ return h.wave !== null && h.wave !== undefined; });
+  if(valid.length < 2) return '<div class="placeholder">파고 데이터가 없어요.</div>';
+  const THRESHOLD = 1.0;
+  const W=760,H=170,padX=34,padY=20;
+  const vals = valid.map(function(h){ return h.wave; });
+  const dataMax = Math.max.apply(null, vals);
+  const max = Math.max(1.3, dataMax*1.15);
+  const min = 0;
+  const xOf = function(h){ return padX + (h/24)*(W-padX*2); };
+  const yOf = function(v){ return H-padY - ((v-min)/((max-min)||1))*(H-padY*2); };
+  const pxy = valid.map(function(h){ return {x:xOf(h.hour), y:yOf(h.wave)}; });
+  const linePath = catmullRomPath(pxy);
+  const areaPath = linePath + ' L '+xOf(valid[valid.length-1].hour)+' '+(H-padY)+' L '+xOf(valid[0].hour)+' '+(H-padY)+' Z';
+
+  let axisG = '';
+  for(let h=0; h<=24; h+=2){
+    axisG += '<line x1="'+xOf(h)+'" y1="'+padY+'" x2="'+xOf(h)+'" y2="'+(H-padY)+'" stroke="#1E4E68" stroke-width="1"/>';
+    axisG += '<text x="'+xOf(h)+'" y="'+(H-4)+'" font-size="9" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
+  }
+
+  let dangerBand = '', thresholdLine = '';
+  if(max > THRESHOLD){
+    const thresholdY = yOf(THRESHOLD);
+    dangerBand = '<rect x="'+padX+'" y="'+padY+'" width="'+(W-padX*2)+'" height="'+(thresholdY-padY)+'" fill="'+C.coral+'" opacity="0.12"/>';
+    thresholdLine = '<line x1="'+padX+'" y1="'+thresholdY+'" x2="'+(W-padX)+'" y2="'+thresholdY+'" stroke="'+C.coral+'" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+      '<text x="'+(W-padX)+'" y="'+(thresholdY-6)+'" font-size="9" fill="'+C.coral+'" text-anchor="end">1m 주의선</text>';
+  }
+  let midLine = '';
+  if(max > 0.5){
+    const midY = yOf(0.5);
+    midLine = '<line x1="'+padX+'" y1="'+midY+'" x2="'+(W-padX)+'" y2="'+midY+'" stroke="'+C.amber+'" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.8"/>'+
+      '<text x="'+(W-padX)+'" y="'+(midY-6)+'" font-size="9" fill="'+C.amber+'" text-anchor="end">0.5m</text>';
+  }
+
+  let markersG = '';
+  valid.filter(function(h){ return h.hour%2===0; }).forEach(function(h){
+    const col = h.wave >= THRESHOLD ? C.coral : C.teal;
+    markersG += '<circle cx="'+xOf(h.hour)+'" cy="'+yOf(h.wave)+'" r="3" fill="'+col+'"/>';
+  });
+
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%">'+
+    '<defs><linearGradient id="wf2" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0%" stop-color="'+C.teal+'" stop-opacity="0.35"/>'+
+    '<stop offset="100%" stop-color="'+C.teal+'" stop-opacity="0"/>'+
+    '</linearGradient></defs>'+
+    dangerBand+
+    axisG+
+    thresholdLine+
+    midLine+
+    '<path d="'+areaPath+'" fill="url(#wf2)"/>'+
+    '<path d="'+linePath+'" fill="none" stroke="'+C.teal+'" stroke-width="2"/>'+
+    markersG+
+    '</svg>';
+}
+
+function riskyText(text, isRisky){
+  return isRisky ? '<span style="color:var(--coral);font-weight:700">'+text+'</span>' : text;
+}
+
 function renderTable(hours, indoor){
   const twoHourly = hours.filter(function(h){ return h.hour%2===0; });
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
@@ -570,18 +654,24 @@ function renderTable(hours, indoor){
     if(s===null) return '<td style="color:var(--foamDim)">-</td>';
     return '<td><span class="dot" style="background:'+scoreColor(s)+'" title="'+s+'점"></span></td>';
   }).join('') + '</tr>';
-  let waveRow = '<tr><td class="row-label">풍랑(파고)</td>' + twoHourly.map(function(h){ return '<td>'+(indoor?'-':(h.wave!==null?h.wave+'m':'-'))+'</td>'; }).join('') + '</tr>';
+  let waveRow = '<tr><td class="row-label">파고</td>' + twoHourly.map(function(h){
+    if(indoor || h.wave===null) return '<td>-</td>';
+    return '<td>'+riskyText(h.wave+'m', h.wave>=1)+'</td>';
+  }).join('') + '</tr>';
   let swellRow = '<tr><td class="row-label">너울</td>' + twoHourly.map(function(h){
     if(indoor) return '<td>-</td>';
-    return '<td>'+h.swell+'m<span class="sub">'+h.swellPeriod+'s '+h.swellDir+'</span></td>';
+    return '<td>'+riskyText(h.swell+'m', h.swell>=1.2)+'<span class="sub">'+h.swellPeriod+'s '+h.swellDir+'</span></td>';
   }).join('') + '</tr>';
   let windRow = '<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(function(h){
     if(indoor || h.windSpeed===null) return '<td>-</td>';
     const deg = h.windDeg!==null ? h.windDeg : (DIR_DEG[h.windDir]||0);
-    return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+h.windSpeed+'m/s</span></td>';
+    return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+riskyText(h.windSpeed+'m/s', h.windSpeed>=8)+'</span></td>';
   }).join('') + '</tr>';
-  let currentRow = '<tr><td class="row-label">조류</td>' + twoHourly.map(function(h){ return '<td>'+(indoor?'-':h.current+'cm/s')+'</td>'; }).join('') + '</tr>';
-  let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(function(h){ return '<td>'+h.waterTemp+'℃</td>'; }).join('') + '</tr>';
+  let currentRow = '<tr><td class="row-label">조류</td>' + twoHourly.map(function(h){
+    if(indoor) return '<td>-</td>';
+    return '<td>'+riskyText(h.current+'cm/s', h.current>=20)+'</td>';
+  }).join('') + '</tr>';
+  let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>';
   let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(function(h){ return '<td>'+(h.temp!==null?h.temp+'℃':'-')+'</td>'; }).join('') + '</tr>';
   let skyRow = '<tr><td class="row-label">하늘</td>' + twoHourly.map(function(h){ return '<td><span class="sky-icon">'+(h.sky ? (SKY_ICON[h.sky]||h.sky) : '-')+'</span></td>'; }).join('') + '</tr>';
   let precipRow = '<tr><td class="row-label">강수</td>' + twoHourly.map(function(h){
@@ -593,7 +683,7 @@ function renderTable(hours, indoor){
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
     '<span><span class="dot" style="background:'+C.coral+'"></span>주의</span>'+
-    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 너울·조류·수온은 <b style="color:'+C.amber+'">추정치</b></span>'+
+    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 너울·조류·수온은 <b style="color:'+C.amber+'">추정치</b> · <b style="color:'+C.coral+'">빨간 숫자</b>는 AIDA2 기준 주의 수치</span>'+
   '</div>';
 }
 
@@ -607,11 +697,14 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr){
           ' <span class="badge '+(tideLive?'live':'mock')+'">'+(loc.indoor? '실내' : (tideLive?'●실시간':'●추정'))+'</span>'+
         '</span>'+
       '</div>'+
+      '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최저수위 기준 수위 증감 (약최저저조면 기준)</div>'+
       renderTideSVG(tideData.tidePoints, tideData.extremes, loc.indoor)+
+      '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간</div>'+
+      renderWaveSVG(hours, loc.indoor)+
     '</div>'+
     '<div class="card">'+
       '<div class="card-head">'+
-        '<h3>시간대별 상세 (2시간 단위)</h3>'+
+        '<h3>시간대별 상세 ('+formatDateDisplay(dateStr)+')</h3>'+
         '<span class="badge '+(weatherLive?'live':'mock')+'">'+(loc.indoor? '실내' : (weatherLive?'●기상청 실시간':'●추정'))+'</span>'+
       '</div>'+
       renderTable(hours, loc.indoor)+
