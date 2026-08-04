@@ -355,6 +355,15 @@ function buildHoursFromWeather(items, dateStr){
   return hours;
 }
 
+async function fetchSunTimes(lat, lng, dateStr){
+  const url = API_BASE + '/api/sunTimes?date=' + dateStr + '&lat=' + lat + '&lng=' + lng;
+  const res = await fetch(url);
+  const json = await res.json();
+  if(!json || !json.sunrise || !json.sunset) throw new Error('no suntimes');
+  const fmt = function(t){ return (t && t.length===4) ? t.slice(0,2)+':'+t.slice(2,4) : t; };
+  return { sunrise: fmt(json.sunrise), sunset: fmt(json.sunset) };
+}
+
 async function fetchTideTimeItems(obsCode, dateStr){
   const url = `${API_BASE}/api/tideTime?obs_post_id=${obsCode}&date=${dateStr}`;
   const res = await fetch(url);
@@ -501,7 +510,10 @@ async function loadAndRender(loc){
   }
   if(!tideLive){ tideData = mockTide(loc.lat, loc.lng, dateStr); }
 
-  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr);
+  let sunTimes = null;
+  try{ sunTimes = await fetchSunTimes(loc.lat, loc.lng, dateStr); }catch(e){ sunTimes = null; }
+
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes);
 }
 
 function buildIndoorHours(){
@@ -634,9 +646,13 @@ function riskyText(text, isRisky){
   return isRisky ? '<span style="color:var(--coral);font-weight:700">'+text+'</span>' : text;
 }
 
-function renderTable(hours, indoor){
+function renderTable(hours, indoor, sunTimes){
   const twoHourly = hours.filter(function(h){ return h.hour%2===0; });
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
+  let sunRow = '';
+  if(!indoor && sunTimes){
+    sunRow = '<tr><td class="row-label">일출/일몰</td><td colspan="'+twoHourly.length+'" style="text-align:center;line-height:1.5;">'+sunTimes.sunrise+'<span class="sub">'+sunTimes.sunset+'</span></td></tr>';
+  }
   let scoreRow = '<tr><td class="row-label">적합도</td>' + twoHourly.map(function(h){
     const s = hourScore(indoor?{sky:'실내'}:h);
     if(s===null) return '<td style="color:var(--foamDim)">-</td>';
@@ -658,7 +674,7 @@ function renderTable(hours, indoor){
     if(indoor) return '<td>-</td>';
     return '<td>'+(h.precip!==null?h.precip+'%':'-')+'<span class="sub">'+(h.precipAmount>0?h.precipAmount+'mm':'-')+'</span></td>';
   }).join('') + '</tr>';
-  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+scoreRow+waveRow+windRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
+  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+waveRow+windRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
   '<div class="legend">'+
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
@@ -667,7 +683,7 @@ function renderTable(hours, indoor){
   '</div>';
 }
 
-function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr){
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes){
   const el = document.getElementById('results');
   el.innerHTML =
     '<div class="card">'+
@@ -687,7 +703,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr){
         '<h3>시간대별 상세 ('+formatDateDisplay(dateStr)+')</h3>'+
         '<span class="badge '+(weatherLive?'live':'mock')+'">'+(loc.indoor? '실내' : (weatherLive?'●기상청 실시간':'●추정'))+'</span>'+
       '</div>'+
-      renderTable(hours, loc.indoor)+
+      renderTable(hours, loc.indoor, sunTimes)+
     '</div>';
 }
 
