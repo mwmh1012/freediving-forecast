@@ -109,7 +109,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.3)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.5)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -993,9 +993,11 @@ function extractMidRangeForDay(midData, dayIndex){
 
 function renderMidRangeCard(data){
   if(!data) return '<div class="placeholder">중기예보 데이터를 가져오지 못했어요.</div>';
+  const hasSea = (data.whA!=null || data.whB!=null || data.whAAm!=null || data.whAPm!=null);
+  const seaNote = hasSea ? '' : '<div style="font-size:11px;color:var(--foamDim);margin-bottom:10px;">이 지점은 해상 예보 대상 지역이 아니라 파고 정보가 없어요(내륙).</div>';
   const taLine = '<div style="margin-top:12px;font-size:13px;">기온 '+(data.taMin!=null?data.taMin:'-')+'℃ ~ '+(data.taMax!=null?data.taMax:'-')+'℃</div>';
   if(data.split){
-    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+    return seaNote + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
       '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
         '<div style="font-size:12px;color:var(--foamDim);margin-bottom:6px;">오전</div>'+
         '<div style="font-size:18px;">'+(data.wfAm||'-')+'</div>'+
@@ -1010,7 +1012,7 @@ function renderMidRangeCard(data){
       '</div>'+
     '</div>' + taLine;
   }
-  return '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
+  return seaNote + '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
       '<div style="font-size:18px;">'+(data.wf||'-')+'</div>'+
       '<div style="margin-top:8px;font-size:13px;">파고 '+(data.whA!=null?data.whA:'-')+'~'+(data.whB!=null?data.whB:'-')+'m</div>'+
       '<div style="font-size:13px;">강수확률 '+(data.rn!=null?data.rn+'%':'-')+'</div>'+
@@ -1236,15 +1238,70 @@ function nearestDbEntry(lat, lng){
   });
   return best ? {entry:best, dist:bestDist} : null;
 }
+const MID_TA_CODE_MAP = {"백령도": "11A00101", "서울": "11B10101", "과천": "11B10102", "광명": "11B10103", "강화": "11B20101", "김포": "11B20102", "인천": "11B20201", "시흥": "11B20202", "안산": "11B20203", "부천": "11B20204", "의정부": "11B20301", "고양": "11B20302", "양주": "11B20304", "파주": "11B20305", "동두천": "11B20401", "연천": "11B20402", "포천": "11B20403", "가평": "11B20404", "구리": "11B20501", "남양주": "11B20502", "양평": "11B20503", "하남": "11B20504", "수원": "11B20601", "안양": "11B20602", "오산": "11B20603", "화성": "11B20604", "성남": "11B20605", "평택": "11B20606", "의왕": "11B20609", "군포": "11B20610", "안성": "11B20611", "용인": "11B20612", "이천": "11B20701", "여주": "11B20703", "충주": "11C10101", "진천": "11C10102", "음성": "11C10103", "제천": "11C10201", "단양": "11C10202", "청주": "11C10301", "보은": "11C10302", "괴산": "11C10303", "증평": "11C10304", "추풍령": "11C10401", "영동": "11C10402", "옥천": "11C10403", "서산": "11C20101", "태안": "11C20102", "당진": "11C20103", "홍성": "11C20104", "보령": "11C20201", "서천": "11C20202", "천안": "11C20301", "아산": "11C20302", "예산": "11C20303", "대전": "11C20401", "공주": "11C20402", "계룡": "11C20403", "세종": "11C20404", "부여": "11C20501", "청양": "11C20502", "금산": "11C20601", "논산": "11C20602", "철원": "11D10101", "화천": "11D10102", "인제": "11D10201", "양구": "11D10202", "춘천": "11D10301", "홍천": "11D10302", "원주": "11D10401", "횡성": "11D10402", "영월": "11D10501", "정선": "11D10502", "평창": "11D10503", "대관령": "11D20201", "태백": "11D20301", "속초": "11D20401", "양양": "11D20403", "강릉": "11D20501", "동해": "11D20601", "삼척": "11D20602", "울릉도": "11E00101", "독도": "11E00102", "전주": "11F10201", "익산": "11F10202", "정읍": "11F10203", "완주": "11F10204", "장수": "11F10301", "무주": "11F10302", "진안": "11F10303", "남원": "11F10401", "임실": "11F10402", "순창": "11F10403", "완도": "11F20301", "해남": "11F20302", "강진": "11F20303", "장흥": "11F20304", "여수": "11F20401", "광양": "11F20402", "고흥": "11F20403", "보성": "11F20404", "순천시": "11F20405", "장성": "11F20502", "나주": "11F20503", "담양": "11F20504", "화순": "11F20505", "구례": "11F20601", "곡성": "11F20602", "순천": "11F20603", "흑산도": "11F20701", "성산": "11G00101", "제주": "11G00201", "성판악": "11G00302", "서귀포": "11G00401", "고산": "11G00501", "이어도": "11G00601", "추자도": "11G00800", "산천단": "11G00901", "한남": "11G01001", "울진": "11H10101", "영덕": "11H10102", "포항": "11H10201", "경주": "11H10202", "문경": "11H10301", "상주": "11H10302", "예천": "11H10303", "영주": "11H10401", "봉화": "11H10402", "영양": "11H10403", "안동": "11H10501", "의성": "11H10502", "청송": "11H10503", "김천": "11H10601", "구미": "11H10602", "고령": "11H10604", "성주": "11H10605", "대구": "11H10701", "영천": "11H10702", "경산": "11H10703", "청도": "11H10704", "칠곡": "11H10705", "군위": "11H10707", "울산": "11H20101", "양산": "11H20102", "부산": "11H20201", "창원": "11H20301", "김해": "11H20304", "통영": "11H20401", "사천": "11H20402", "거제": "11H20403", "남해": "11H20405", "함양": "11H20501", "거창": "11H20502", "합천": "11H20503", "밀양": "11H20601", "의령": "11H20602", "함안": "11H20603", "창녕": "11H20604", "진주": "11H20701", "산청": "11H20703", "하동": "11H20704", "군산": "21F10501", "김제": "21F10502", "고창": "21F10601", "부안": "21F10602", "함평": "21F20101", "영광": "21F20102", "진도": "21F20201", "목포": "21F20801", "영암": "21F20802", "신안": "21F20803", "무안": "21F20804", "광주_경기": "11B20702", "광주_광역시": "11F20501", "고성_강원": "11D20402", "고성_경남": "11H20404"};
+
+const SEA_ZONE_MAP = {
+  '삼척':'12C20000','속초':'12C20000','양양':'12C20000','강릉':'12C20000','동해':'12C20000','고성_강원':'12C20000',
+  '울진':'12C10000','포항':'12C10000','영덕':'12C10000','울릉도':'12C10000','경주':'12C10000',
+  '부산':'12B20000','울산':'12B20000',
+  '통영':'12B10000','고성_경남':'12B10000','거제':'12B10000','사천':'12B10000','남해':'12B10000','여수':'12B10000','고흥':'12B10000','완도':'12B10000',
+  '신안':'12A30000','목포':'12A30000','영암':'12A30000','해남':'12A30000','진도':'12A30000',
+  '제주':'12B10500','서귀포':'12B10500','성산':'12B10500','고산':'12B10500',
+  '인천':'12A20000','강화':'12A20000','김포':'12A20000','태안':'12A20000','서산':'12A20000','보령':'12A20000','군산':'12A20000'
+};
+
+function midLandParentFor(cCode){
+  if(!cCode) return null;
+  if(cCode.slice(0,3)==='11B' || cCode.slice(0,3)==='21B') return '11B00000';
+  const map4 = {'11C1':'11C10000','11C2':'11C20000','11D1':'11D10000','11D2':'11D20000','11F1':'11F10000','11F2':'11F20000','21F1':'11F10000','21F2':'11F20000','11G0':'11G00000','11H1':'11H10000','11H2':'11H20000'};
+  return map4[cCode.slice(0,4)] || null;
+}
+
+function lookupMidCodes(cityRaw, provinceRaw){
+  if(!cityRaw) return null;
+  function resolveKey(name){
+    if(name==='고성'){
+      if(provinceRaw && provinceRaw.indexOf('강원')>-1) return '고성_강원';
+      if(provinceRaw && (provinceRaw.indexOf('경남')>-1 || provinceRaw.indexOf('경상남도')>-1)) return '고성_경남';
+      return null;
+    }
+    if(name==='광주'){
+      if(provinceRaw && provinceRaw.indexOf('경기')>-1) return '광주_경기';
+      return '광주_광역시';
+    }
+    return MID_TA_CODE_MAP[name] ? name : null;
+  }
+  let key = resolveKey(cityRaw);
+  if(!key){
+    const suffixes = ['특별자치시','특별자치도','광역시','특별시','자치도','시','군','구'];
+    for(let i=0;i<suffixes.length;i++){
+      const suf = suffixes[i];
+      if(cityRaw.length>suf.length && cityRaw.slice(-suf.length)===suf){
+        const stripped = cityRaw.slice(0, cityRaw.length-suf.length);
+        const k = resolveKey(stripped);
+        if(k){ key = k; break; }
+      }
+    }
+  }
+  if(!key || !MID_TA_CODE_MAP[key]) return null;
+  const taCode = MID_TA_CODE_MAP[key];
+  const landCode = midLandParentFor(taCode);
+  const seaCode = SEA_ZONE_MAP[key] || null;
+  return { ta: taCode, land: landCode, sea: seaCode };
+}
+function midCodesFromAddressString(addr){
+  if(!addr) return null;
+  const parts = addr.trim().split(/\s+/);
+  if(parts.length<2) return null;
+  return lookupMidCodes(parts[1], parts[0]);
+}
+
 function attachRegionCodes(loc){
   if(loc.indoor || loc.areaCode) return loc;
   const nearest = nearestDbEntry(loc.lat, loc.lng);
   if(nearest){
     if(nearest.dist < 50 && nearest.entry.areaCode) loc.areaCode = nearest.entry.areaCode;
     if(nearest.dist < 25 && nearest.entry.landAreaCode) loc.landAreaCode = nearest.entry.landAreaCode;
-    if(nearest.dist < 50 && nearest.entry.midSeaCode) loc.midSeaCode = nearest.entry.midSeaCode;
-    if(nearest.dist < 25 && nearest.entry.midLandCode) loc.midLandCode = nearest.entry.midLandCode;
-    if(nearest.dist < 25 && nearest.entry.midTaCode) loc.midTaCode = nearest.entry.midTaCode;
   }
   return loc;
 }
@@ -1261,12 +1318,13 @@ function reverseGeocode(lat,lng){
   }
   kakaoGeocoder.coord2Address(lng, lat, function(result, status){
     let name = null;
-    let preciseLand = null;
+    let preciseLand = null, preciseMid = null;
     if(status === kakao.maps.services.Status.OK && result[0]){
       const r = result[0];
       if(r.address){
         name = [r.address.region_1depth_name, r.address.region_2depth_name, r.address.region_3depth_name].filter(Boolean).join(' ');
         preciseLand = lookupLandCode(r.address.region_2depth_name, r.address.region_1depth_name);
+        preciseMid = lookupMidCodes(r.address.region_2depth_name, r.address.region_1depth_name);
       } else if(r.road_address){
         name = r.road_address.address_name;
       }
@@ -1278,6 +1336,7 @@ function reverseGeocode(lat,lng){
     }
     const loc = attachRegionCodes({name:name, lat:lat, lng:lng, indoor:false});
     if(preciseLand) loc.landAreaCode = preciseLand;
+    if(preciseMid){ loc.midSeaCode=preciseMid.sea; loc.midLandCode=preciseMid.land; loc.midTaCode=preciseMid.ta; }
     selectLocation(loc);
   });
 }
@@ -1330,6 +1389,8 @@ async function runSearch(query){
       const loc = attachRegionCodes({name:r.name, lat:r.lat, lng:r.lng, indoor:false});
       const preciseLand = landCodeFromAddressString(r.address);
       if(preciseLand) loc.landAreaCode = preciseLand;
+      const preciseMid = midCodesFromAddressString(r.address);
+      if(preciseMid){ loc.midSeaCode=preciseMid.sea; loc.midLandCode=preciseMid.land; loc.midTaCode=preciseMid.ta; }
       selectLocation(loc);
       searchStatus.textContent = '';
     } else { searchStatus.textContent = '검색 결과가 없어요. 지도를 직접 클릭해서 위치를 찍어주세요.'; }
@@ -1357,6 +1418,8 @@ searchInput.addEventListener('input', function(){
           const loc = attachRegionCodes({name:r.name, lat:r.lat, lng:r.lng, indoor:false});
           const preciseLand = landCodeFromAddressString(r.address);
           if(preciseLand) loc.landAreaCode = preciseLand;
+          const preciseMid = midCodesFromAddressString(r.address);
+          if(preciseMid){ loc.midSeaCode=preciseMid.sea; loc.midLandCode=preciseMid.land; loc.midTaCode=preciseMid.ta; }
           selectLocation(loc);
           searchStatus.textContent='';
         });
