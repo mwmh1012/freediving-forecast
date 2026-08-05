@@ -104,7 +104,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v2.0)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v2.5)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -133,7 +133,7 @@
 
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
-    조회 날짜가 기상청 단기예보 제공 범위(대략 오늘부터 2~3일)를 벗어나면 자동으로 추정치로 대체돼요.
+    기상청 데이터가 일부만 있는 시간대는 있는 만큼만 표시하고 나머지는 "-"로 비워둬요. 그 날짜에 기상청 데이터가 아예 없으면(대략 오늘부터 3일 이후) 하루 전체가 추정치로 표시돼요.
     화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장 강사·버디의 판단이 우선입니다.
   </div>
 </div>
@@ -619,8 +619,7 @@ async function loadAndRender(loc){
   let hours;
   if(weatherLive){
     hours = buildHoursFromWeather(weatherItems, dateStr);
-    const liveCount = hours.filter(function(h){ return h !== null; }).length;
-    if(liveCount < 8) weatherLive = false; // too sparse to be useful — treat as out of forecast range
+    if(hours.every(function(h){return h===null;})) weatherLive = false;
   }
   if(!weatherLive){
     hours = [];
@@ -739,7 +738,8 @@ function catmullRomPath(pts){
   return d;
 }
 
-function renderWaveSVG(hours, indoor){
+function renderWaveSVG(hours, indoor, step){
+  step = step || 2;
   if(indoor) return '<div class="placeholder">실내라 파고 데이터가 없어요.</div>';
   const valid = hours.filter(function(h){ return h.wave !== null && h.wave !== undefined; });
   if(valid.length < 2) return '<div class="placeholder">파고 데이터가 없어요.</div>';
@@ -756,7 +756,7 @@ function renderWaveSVG(hours, indoor){
   const areaPath = linePath + ' L '+xOf(valid[valid.length-1].hour)+' '+(H-padY)+' L '+xOf(valid[0].hour)+' '+(H-padY)+' Z';
 
   let axisG = '';
-  for(let h=0; h<=24; h+=2){
+  for(let h=0; h<=24; h+=step){
     axisG += '<line x1="'+xOf(h)+'" y1="'+padY+'" x2="'+xOf(h)+'" y2="'+(H-padY)+'" stroke="#1E4E68" stroke-width="1"/>';
     axisG += '<text x="'+xOf(h)+'" y="'+(H-4)+'" font-size="9" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
   }
@@ -776,7 +776,7 @@ function renderWaveSVG(hours, indoor){
   }
 
   let markersG = '';
-  valid.filter(function(h){ return h.hour%2===0; }).forEach(function(h){
+  valid.filter(function(h){ return h.hour%step===0; }).forEach(function(h){
     const col = h.wave >= THRESHOLD ? C.coral : C.teal;
     markersG += '<circle cx="'+xOf(h.hour)+'" cy="'+yOf(h.wave)+'" r="3" fill="'+col+'"/>';
   });
@@ -810,8 +810,9 @@ function nearestColumnHour(hhmm){
   return nearest;
 }
 
-function renderTable(hours, indoor, sunTimes){
-  const twoHourly = hours.filter(function(h){ return h.hour%2===0; });
+function renderTable(hours, indoor, sunTimes, step){
+  step = step || 2;
+  const twoHourly = hours.filter(function(h){ return h.hour%step===0; });
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
   let sunRow = '';
   if(!indoor && sunTimes){
@@ -824,7 +825,7 @@ function renderTable(hours, indoor, sunTimes){
       return '<td style="font-size:10px;">'+(parts.length ? parts.join('<br>') : '-')+'</td>';
     }).join('') + '</tr>';
   }
-  let scoreRow = '<tr><td class="row-label">적합도</td>' + twoHourly.map(function(h){
+  let scoreRow = '<tr><td class="row-label">입수적합도</td>' + twoHourly.map(function(h){
     const s = hourScore(indoor?{sky:'실내'}:h);
     if(s===null) return '<td style="color:var(--foamDim)">-</td>';
     return '<td><span class="dot" style="background:'+scoreColor(s)+'" title="'+s+'점"></span></td>';
@@ -838,14 +839,14 @@ function renderTable(hours, indoor, sunTimes){
     const deg = h.windDeg!==null ? h.windDeg : (DIR_DEG[h.windDir]||0);
     return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+riskyText(h.windSpeed+'m/s', h.windSpeed>=8)+'</span></td>';
   }).join('') + '</tr>';
-  let waterTempRow = '<tr><td class="row-label">수온(표층)</td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>';
+  let waterTempRow = '<tr><td class="row-label">표층수온<span class="sub">(계절평균값)</span></td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>';
   let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(function(h){ return '<td>'+(h.temp!==null?h.temp+'℃':'-')+'</td>'; }).join('') + '</tr>';
   let skyRow = '<tr><td class="row-label">하늘</td>' + twoHourly.map(function(h){ return '<td><span class="sky-icon">'+(h.sky ? (SKY_ICON[h.sky]||h.sky) : '-')+'</span></td>'; }).join('') + '</tr>';
   let precipRow = '<tr><td class="row-label">강수</td>' + twoHourly.map(function(h){
     if(indoor) return '<td>-</td>';
     return '<td>'+(h.precip!==null?h.precip+'%':'-')+'<span class="sub">'+(h.precipAmount>0?h.precipAmount+'mm':'-')+'</span></td>';
   }).join('') + '</tr>';
-  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+waveRow+windRow+waterTempRow+tempRow+skyRow+precipRow+'</tbody></table></div>'+
+  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+skyRow+tempRow+precipRow+waveRow+windRow+waterTempRow+'</tbody></table></div>'+
   '<div class="legend">'+
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
@@ -854,10 +855,18 @@ function renderTable(hours, indoor, sunTimes){
   '</div>';
 }
 
+function daysBetween(dateStr, todayStr){
+  function toDate(s){ return new Date(parseInt(s.slice(0,4),10), parseInt(s.slice(4,6),10)-1, parseInt(s.slice(6,8),10)); }
+  const d1 = toDate(dateStr), d2 = toDate(todayStr);
+  return Math.round((d1-d2)/(1000*60*60*24));
+}
+
 function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings){
   const el = document.getElementById('results');
   const todayStr = fmtYmd(new Date());
   const isFutureDate = dateStr !== todayStr;
+  const daysAhead = daysBetween(dateStr, todayStr);
+  const step = daysAhead<=1 ? 2 : 3;
   let warnCardBody;
   if(loc.indoor){
     warnCardBody = '<div style="color:var(--foamDim);font-size:13px;">실내 시설이라 특보 대상이 아니에요.</div>';
@@ -866,9 +875,9 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
   } else if(warnings && warnings.length > 0){
     warnCardBody = warnings.map(function(w){
       const since = formatWarnTime(w.since);
-      const range = since ? (since + ' 발효 ~ 종료일 미정') : '발효 시각 미상';
       const areaTag = w.area ? (' <span style="color:var(--foamDim);font-size:11px;">['+w.area+']</span>') : '';
-      return '<div class="warn-banner" style="margin-bottom:6px;">⚠️ <span><b>'+w.label+'</b> 발효 중'+areaTag+' <span style="color:var(--foamDim);font-size:11px;">('+range+')</span></span></div>';
+      const rangeTag = since ? (' <span style="color:var(--foamDim);font-size:11px;">('+since+' 발효 ~ 종료일 미정)</span>') : '';
+      return '<div class="warn-banner" style="margin-bottom:6px;">⚠️ <span><b>'+w.label+'</b> 발효 중'+areaTag+rangeTag+'</span></div>';
     }).join('') + (isFutureDate ? '<div style="color:var(--foamDim);font-size:11px;margin-top:4px;">※ 특보는 실시간 정보라 지금(오늘) 기준 발효 현황이에요. 조회하신 '+formatWarnTime(dateStr)+'의 실제 상황과는 다를 수 있어요.</div>' : '');
   } else {
     warnCardBody = '<div style="color:var(--foamDim);font-size:13px;">현재 확인된 특보 없음</div>';
@@ -887,14 +896,14 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
       '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최저수위 기준 수위 증감 (약최저저조면 기준)</div>'+
       renderTideSVG(tideData.tidePoints, tideData.extremes, loc.indoor)+
       '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간</div>'+
-      renderWaveSVG(hours, loc.indoor)+
+      renderWaveSVG(hours, loc.indoor, step)+
     '</div>'+
     '<div class="card">'+
       '<div class="card-head">'+
         '<h3>시간대별 상세 ('+formatDateDisplay(dateStr)+')</h3>'+
         '<span class="badge '+(weatherLive?'live':'mock')+'">'+(loc.indoor? '실내' : (weatherLive?'●기상청 실시간':'●추정'))+'</span>'+
       '</div>'+
-      renderTable(hours, loc.indoor, sunTimes)+
+      renderTable(hours, loc.indoor, sunTimes, step)+
     '</div>';
 }
 
