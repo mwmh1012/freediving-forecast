@@ -57,7 +57,7 @@
   table{border-collapse:collapse;width:100%;min-width:820px;font-size:11.5px;table-layout:auto;}
   th,td{padding:7px 5px;text-align:center;font-family:ui-monospace,monospace;}
   thead th{background:var(--panel2);color:var(--foam);}
-  th.row-label,td.row-label{text-align:left;font-family:-apple-system,sans-serif;color:var(--foamDim);background:var(--panel);width:104px;}
+  th.row-label,td.row-label{text-align:left;font-family:-apple-system,sans-serif;color:var(--foamDim);background:var(--panel);width:104px;position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(0,0,0,0.3);}
   thead th.row-label{background:var(--panel2);}
   tbody td{color:var(--foam);background:var(--panel);}
   .sub{display:block;font-size:9px;color:var(--foamDim);margin-top:1px;}
@@ -104,7 +104,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v2.7)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.0)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -388,15 +388,22 @@ const DIRS=["N","NE","E","SE","S","SW","W","NW"];
 const DIR_DEG={N:0,NE:45,E:90,SE:135,S:180,SW:225,W:270,NW:315};
 function degToCompass(deg){ const idx = Math.round(((deg%360)+360)%360/45)%8; return DIRS[idx]; }
 
-async function fetchWeatherItems(lat,lng){
+async function fetchWeatherItems(lat,lng,overrideBase){
   const {nx,ny} = latLngToGrid(lat,lng);
-  const {baseDate, baseTime} = kmaBaseDateTime();
+  const {baseDate, baseTime} = overrideBase || kmaBaseDateTime();
   const url = `${API_BASE}/api/weather?base_date=${baseDate}&base_time=${baseTime}&nx=${nx}&ny=${ny}`;
   const res = await fetch(url);
   const json = await res.json();
   const items = json && json.response && json.response.body && json.response.body.items && json.response.body.items.item;
   if(!items || !Array.isArray(items)) throw new Error('no weather items');
   return items;
+}
+
+function prevCycleBaseDateTime(){
+  const d = new Date();
+  d.setDate(d.getDate()-1);
+  const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+  return { baseDate: `${y}${mo}${da}`, baseTime: '2300' };
 }
 
 function buildHoursFromWeather(items, dateStr){
@@ -648,30 +655,48 @@ async function loadAndRender(loc){
   const el = document.getElementById('results');
   el.innerHTML = '<div class="loading">데이터를 불러오는 중...</div>';
 
+  const daysAheadEarly = daysBetween(dateStr, fmtYmd(new Date()));
+  const outOfRange = !loc.indoor && daysAheadEarly > 10;
+
   if(loc.indoor){
     renderFinal(loc, buildIndoorHours(), {tidePoints:[], extremes:[]}, false, true, dateStr);
     return;
   }
 
-  let weatherItems = null, weatherLive = false;
-  try{ weatherItems = await fetchWeatherItems(loc.lat, loc.lng); weatherLive = true; }catch(e){ weatherLive = false; }
+  let weatherItems = null, weatherLive = false, hours = [];
+  if(!outOfRange){
+    try{ weatherItems = await fetchWeatherItems(loc.lat, loc.lng); weatherLive = true; }catch(e){ weatherLive = false; }
 
-  let hours;
-  if(weatherLive){
-    hours = buildHoursFromWeather(weatherItems, dateStr);
-    if(hours.every(function(h){return h===null;})) weatherLive = false;
+    if(weatherLive){
+      hours = buildHoursFromWeather(weatherItems, dateStr);
+      if(hours.every(function(h){return h===null;})) weatherLive = false;
+    }
+    if(!weatherLive){
+      hours = [];
+      for(let h=0;h<24;h++) hours.push(mockWeatherHour(loc.lat, loc.lng, dateStr, h));
+    } else {
+      // don't backfill individual missing hours with unrelated mock noise (e.g. past hours of "today"
+      // that KMA can't forecast) — leave them as an explicit "no data" row instead
+      hours = hours.map(function(h,i){
+        return h || { hour:i, wave:null, windSpeed:null, windDir:null, windDeg:null, temp:null, sky:null, precip:null, precipAmount:0, isLive:false, missing:true };
+      });
+      // fill in today's already-passed hours using the previous forecast cycle (yesterday 23:00),
+      // which covered those hours as "future" at the time it was issued
+      if(dateStr === fmtYmd(new Date()) && hours.some(function(h){return h.missing;})){
+        try{
+          const prevItems = await fetchWeatherItems(loc.lat, loc.lng, prevCycleBaseDateTime());
+          const prevHours = buildHoursFromWeather(prevItems, dateStr);
+          hours = hours.map(function(h,i){
+            if(h.missing && prevHours[i]){
+              return Object.assign({}, prevHours[i], { isLive:true, isPastPrediction:true, missing:false });
+            }
+            return h;
+          });
+        }catch(e){}
+      }
+    }
+    hours = hours.map(function(h){ return Object.assign({}, h, mockExtra(loc.lat, loc.lng, dateStr, h.hour)); });
   }
-  if(!weatherLive){
-    hours = [];
-    for(let h=0;h<24;h++) hours.push(mockWeatherHour(loc.lat, loc.lng, dateStr, h));
-  } else {
-    // don't backfill individual missing hours with unrelated mock noise (e.g. past hours of "today"
-    // that KMA can't forecast) — leave them as an explicit "no data" row instead
-    hours = hours.map(function(h,i){
-      return h || { hour:i, wave:null, windSpeed:null, windDir:null, windDeg:null, temp:null, sky:null, precip:null, precipAmount:0, isLive:false, missing:true };
-    });
-  }
-  hours = hours.map(function(h){ return Object.assign({}, h, mockExtra(loc.lat, loc.lng, dateStr, h.hour)); });
 
   let tideData = null, tideLive = false;
   if(loc.obsCode){
@@ -718,7 +743,7 @@ async function loadAndRender(loc){
     }catch(e){}
   }
 
-  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary);
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange);
 }
 
 function buildIndoorHours(){
@@ -896,7 +921,7 @@ function renderTable(hours, indoor, sunTimes, step){
     if(indoor) return '<td>-</td>';
     return '<td>'+(h.precip!==null?h.precip+'%':'-')+'<span class="sub">'+(h.precipAmount>0?h.precipAmount+'mm':'-')+'</span></td>';
   }).join('') + '</tr>';
-  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+skyRow+tempRow+precipRow+waveRow+windRow+waterTempRow+'</tbody></table></div>'+
+  return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+skyRow+precipRow+tempRow+waveRow+windRow+waterTempRow+'</tbody></table></div>'+
   '<div class="legend">'+
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
@@ -993,7 +1018,7 @@ function daysBetween(dateStr, todayStr){
   return Math.round((d1-d2)/(1000*60*60*24));
 }
 
-function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary){
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange){
   const el = document.getElementById('results');
   const todayStr = fmtYmd(new Date());
   const isFutureDate = dateStr !== todayStr;
@@ -1027,19 +1052,24 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
       '</div>'+
       '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최저수위 기준 수위 증감 (약최저저조면 기준) · 출처: 국립해양조사원</div>'+
       renderTideSVG(tideData.tidePoints, tideData.extremes, loc.indoor)+
-      (midSummary ? '' :
+      (outOfRange ? '' : (midSummary ? '' :
         '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간 · 출처: 기상청 단기예보</div>'+
         renderWaveSVG(hours, loc.indoor, step)
-      )+
+      ))+
     '</div>'+
     '<div class="card">'+
       '<div class="card-head">'+
-        '<h3>'+(midSummary ? ('시간대별 상세 ('+formatDateDisplay(dateStr)+') · '+daysAhead+'일 후') : ('시간대별 상세 ('+formatDateDisplay(dateStr)+')'))+'</h3>'+
-        '<span class="badge '+(midSummary ? 'mock' : (weatherLive?'live':'mock'))+'">'+(loc.indoor? '실내' : (midSummary ? '●기상청 중기예보' : (weatherLive?'●기상청 단기예보':'●추정')))+'</span>'+
+        '<h3>'+(outOfRange ? '시간대별 상세' : (midSummary ? ('시간대별 상세 ('+formatDateDisplay(dateStr)+') · '+daysAhead+'일 후') : ('시간대별 상세 ('+formatDateDisplay(dateStr)+')')))+'</h3>'+
+        (outOfRange ? '' : '<span class="badge '+(midSummary ? 'mock' : (weatherLive?'live':'mock'))+'">'+(loc.indoor? '실내' : (midSummary ? '●기상청 중기예보' : (weatherLive?'●기상청 단기예보':'●추정')))+'</span>')+
       '</div>'+
-      (midSummary
-        ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary)
-        : renderTable(hours, loc.indoor, sunTimes, step)
+      (outOfRange
+        ? '<div class="placeholder">기상청 예보 제공 범위(10일)를 벗어났어요. 이 지점의 시간대별 날씨·파고 정보는 아직 없어요.</div>'
+        : (midSummary
+          ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary)
+          : ((hours.some(function(h){return h.isPastPrediction;})
+              ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">지나간 시간대는 기상청 전날 23시 발표 예보를 활용해 채웠어요.</div>'
+              : '') + renderTable(hours, loc.indoor, sunTimes, step))
+        )
       )+
     '</div>';
 }
