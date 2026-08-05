@@ -104,7 +104,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v2.5)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v2.6)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -227,6 +227,46 @@ LOCATIONS_DB.forEach(function(l){
   else if(l.name.indexOf('제주')>-1) l.landAreaCode='L1091300';
   else if(l.name.indexOf('강화')>-1) l.landAreaCode='L1010900';
   else if(l.name.indexOf('인천')>-1) l.landAreaCode='L1110100';
+
+  if(l.name.indexOf('울릉도')>-1) l.midSeaCode='12C10000';
+  else if(l.name.indexOf('강원')>-1) l.midSeaCode='12C20000';
+  else if(l.name.indexOf('경북')>-1) l.midSeaCode='12C10000';
+  else if(l.name.indexOf('부산')>-1) l.midSeaCode='12B20000';
+  else if(l.name.indexOf('통영')>-1 || l.name.indexOf('경남')>-1) l.midSeaCode='12B10000';
+  else if(l.name.indexOf('신안')>-1) l.midSeaCode='12A30000';
+  else if(l.name.indexOf('여수')>-1 || l.name.indexOf('고흥')>-1) l.midSeaCode='12B10000';
+  else if(l.name.indexOf('제주')>-1) l.midSeaCode='12B10500';
+  else if(l.name.indexOf('인천')>-1) l.midSeaCode='12A20000';
+
+  if(l.name.indexOf('울릉도')>-1) l.midLandCode='11H10000';
+  else if(l.name.indexOf('강원')>-1) l.midLandCode='11D20000';
+  else if(l.name.indexOf('경북')>-1) l.midLandCode='11H10000';
+  else if(l.name.indexOf('부산')>-1) l.midLandCode='11H20000';
+  else if(l.name.indexOf('통영')>-1 || l.name.indexOf('경남')>-1) l.midLandCode='11H20000';
+  else if(l.name.indexOf('신안')>-1) l.midLandCode='11F20000';
+  else if(l.name.indexOf('여수')>-1 || l.name.indexOf('고흥')>-1) l.midLandCode='11F20000';
+  else if(l.name.indexOf('제주')>-1) l.midLandCode='11G00000';
+  else if(l.name.indexOf('인천')>-1) l.midLandCode='11B00000';
+
+  if(l.name.indexOf('울릉도')>-1) l.midTaCode='11H10201';
+  else if(l.name.indexOf('삼척')>-1) l.midTaCode='11D20602';
+  else if(l.name.indexOf('속초')>-1) l.midTaCode='11D20401';
+  else if(l.name.indexOf('양양')>-1 || l.name.indexOf('하조대')>-1) l.midTaCode='11D20403';
+  else if(l.name.indexOf('강릉')>-1) l.midTaCode='11D20501';
+  else if(l.name.indexOf('고성')>-1 && l.name.indexOf('강원')>-1) l.midTaCode='11D20402';
+  else if(l.name.indexOf('동해')>-1) l.midTaCode='11D20601';
+  else if(l.name.indexOf('울진')>-1) l.midTaCode='11H10101';
+  else if(l.name.indexOf('포항')>-1) l.midTaCode='11H10201';
+  else if(l.name.indexOf('영덕')>-1) l.midTaCode='11H10102';
+  else if(l.name.indexOf('부산')>-1) l.midTaCode='11H20201';
+  else if(l.name.indexOf('통영')>-1) l.midTaCode='11H20401';
+  else if(l.name.indexOf('여수')>-1) l.midTaCode='11F20401';
+  else if(l.name.indexOf('고흥')>-1) l.midTaCode='11F20403';
+  else if(l.name.indexOf('신안')>-1) l.midTaCode='21F20803';
+  else if(l.name.indexOf('서귀포')>-1) l.midTaCode='11G00401';
+  else if(l.name.indexOf('제주')>-1) l.midTaCode='11G00201';
+  else if(l.name.indexOf('강화')>-1) l.midTaCode='11B20101';
+  else if(l.name.indexOf('인천')>-1) l.midTaCode='11B20201';
 });
 
 const DEFAULT_FAVORITES = [
@@ -649,6 +689,16 @@ async function loadAndRender(loc){
   let sunTimes = null;
   try{ sunTimes = await fetchSunTimes(loc.lat, loc.lng, dateStr); }catch(e){ sunTimes = null; }
 
+  const todayStrForMid = fmtYmd(new Date());
+  const daysAheadForMid = daysBetween(dateStr, todayStrForMid);
+  let midSummary = null;
+  if(!loc.indoor && daysAheadForMid>=4 && daysAheadForMid<=10 && (loc.midSeaCode || loc.midLandCode)){
+    try{
+      const midData = await fetchMidRangeData(loc);
+      midSummary = extractMidRangeForDay(midData, daysAheadForMid);
+    }catch(e){ midSummary = null; }
+  }
+
   let warnings = [];
   if(loc.areaCode){
     try{ warnings = warnings.concat(await fetchWarningsExpanded(loc.areaCode)); }catch(e){}
@@ -668,7 +718,7 @@ async function loadAndRender(loc){
     }catch(e){}
   }
 
-  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings);
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary);
 }
 
 function buildIndoorHours(){
@@ -855,13 +905,95 @@ function renderTable(hours, indoor, sunTimes, step){
   '</div>';
 }
 
+function midBaseDateTime(){
+  const now = new Date();
+  let h = now.getHours();
+  let d = new Date(now);
+  let time = '0600';
+  if(h>=18){ time='1800'; }
+  else if(h<6){ d.setDate(d.getDate()-1); time='1800'; }
+  const y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+  return y+mo+da+time;
+}
+
+async function fetchMidPart(type, regId, tmFc){
+  if(!regId) return null;
+  const url = API_BASE + '/api/midForecast?type=' + type + '&regId=' + regId + '&tmFc=' + tmFc;
+  const res = await fetch(url);
+  const json = await res.json();
+  const items = json && json.response && json.response.body && json.response.body.items && json.response.body.items.item;
+  if(!items) return null;
+  return Array.isArray(items) ? items[0] : items;
+}
+
+async function fetchMidRangeData(loc){
+  const tmFc = midBaseDateTime();
+  const results = {};
+  try{ results.land = await fetchMidPart('land', loc.midLandCode, tmFc); }catch(e){ results.land = null; }
+  try{ results.sea = await fetchMidPart('sea', loc.midSeaCode, tmFc); }catch(e){ results.sea = null; }
+  try{ results.ta = await fetchMidPart('ta', loc.midTaCode, tmFc); }catch(e){ results.ta = null; }
+  return results;
+}
+
+function extractMidRangeForDay(midData, dayIndex){
+  const land = midData.land, sea = midData.sea, ta = midData.ta;
+  const d = dayIndex;
+  const result = { day: d };
+  if(d <= 7){
+    result.split = true;
+    result.wfAm = land ? land['wf'+d+'Am'] : null;
+    result.wfPm = land ? land['wf'+d+'Pm'] : null;
+    result.rnAm = land ? land['rnSt'+d+'Am'] : null;
+    result.rnPm = land ? land['rnSt'+d+'Pm'] : null;
+    result.whAAm = sea ? sea['wh'+d+'AAm'] : null;
+    result.whAPm = sea ? sea['wh'+d+'APm'] : null;
+    result.whBAm = sea ? sea['wh'+d+'BAm'] : null;
+    result.whBPm = sea ? sea['wh'+d+'BPm'] : null;
+  } else {
+    result.split = false;
+    result.wf = land ? land['wf'+d] : null;
+    result.rn = land ? land['rnSt'+d] : null;
+    result.whA = sea ? sea['wh'+d+'A'] : null;
+    result.whB = sea ? sea['wh'+d+'B'] : null;
+  }
+  result.taMin = ta ? ta['taMin'+d] : null;
+  result.taMax = ta ? ta['taMax'+d] : null;
+  return result;
+}
+
+function renderMidRangeCard(data){
+  if(!data) return '<div class="placeholder">중기예보 데이터를 가져오지 못했어요.</div>';
+  const taLine = '<div style="margin-top:12px;font-size:13px;">기온 '+(data.taMin!=null?data.taMin:'-')+'℃ ~ '+(data.taMax!=null?data.taMax:'-')+'℃</div>';
+  if(data.split){
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
+        '<div style="font-size:12px;color:var(--foamDim);margin-bottom:6px;">오전</div>'+
+        '<div style="font-size:18px;">'+(data.wfAm||'-')+'</div>'+
+        '<div style="margin-top:8px;font-size:13px;">파고 '+(data.whAAm!=null?data.whAAm:'-')+'~'+(data.whBAm!=null?data.whBAm:'-')+'m</div>'+
+        '<div style="font-size:13px;">강수확률 '+(data.rnAm!=null?data.rnAm+'%':'-')+'</div>'+
+      '</div>'+
+      '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
+        '<div style="font-size:12px;color:var(--foamDim);margin-bottom:6px;">오후</div>'+
+        '<div style="font-size:18px;">'+(data.wfPm||'-')+'</div>'+
+        '<div style="margin-top:8px;font-size:13px;">파고 '+(data.whAPm!=null?data.whAPm:'-')+'~'+(data.whBPm!=null?data.whBPm:'-')+'m</div>'+
+        '<div style="font-size:13px;">강수확률 '+(data.rnPm!=null?data.rnPm+'%':'-')+'</div>'+
+      '</div>'+
+    '</div>' + taLine;
+  }
+  return '<div style="background:var(--panel2);border-radius:10px;padding:12px;">'+
+      '<div style="font-size:18px;">'+(data.wf||'-')+'</div>'+
+      '<div style="margin-top:8px;font-size:13px;">파고 '+(data.whA!=null?data.whA:'-')+'~'+(data.whB!=null?data.whB:'-')+'m</div>'+
+      '<div style="font-size:13px;">강수확률 '+(data.rn!=null?data.rn+'%':'-')+'</div>'+
+    '</div>' + taLine;
+}
+
 function daysBetween(dateStr, todayStr){
   function toDate(s){ return new Date(parseInt(s.slice(0,4),10), parseInt(s.slice(4,6),10)-1, parseInt(s.slice(6,8),10)); }
   const d1 = toDate(dateStr), d2 = toDate(todayStr);
   return Math.round((d1-d2)/(1000*60*60*24));
 }
 
-function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings){
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary){
   const el = document.getElementById('results');
   const todayStr = fmtYmd(new Date());
   const isFutureDate = dateStr !== todayStr;
@@ -893,17 +1025,22 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
           ' <span class="badge '+(tideLive?'live':'mock')+'">'+(loc.indoor? '실내' : (tideLive?'●실시간':'●추정'))+'</span>'+
         '</span>'+
       '</div>'+
-      '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최저수위 기준 수위 증감 (약최저저조면 기준)</div>'+
+      '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최저수위 기준 수위 증감 (약최저저조면 기준) · 출처: 국립해양조사원</div>'+
       renderTideSVG(tideData.tidePoints, tideData.extremes, loc.indoor)+
-      '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간</div>'+
-      renderWaveSVG(hours, loc.indoor, step)+
+      (midSummary ? '' :
+        '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간 · 출처: 기상청 단기예보</div>'+
+        renderWaveSVG(hours, loc.indoor, step)
+      )+
     '</div>'+
     '<div class="card">'+
       '<div class="card-head">'+
-        '<h3>시간대별 상세 ('+formatDateDisplay(dateStr)+')</h3>'+
-        '<span class="badge '+(weatherLive?'live':'mock')+'">'+(loc.indoor? '실내' : (weatherLive?'●기상청 실시간':'●추정'))+'</span>'+
+        '<h3>'+(midSummary ? ('시간대별 상세 ('+formatDateDisplay(dateStr)+') · '+daysAhead+'일 후') : ('시간대별 상세 ('+formatDateDisplay(dateStr)+')'))+'</h3>'+
+        '<span class="badge '+(midSummary ? 'mock' : (weatherLive?'live':'mock'))+'">'+(loc.indoor? '실내' : (midSummary ? '●기상청 중기예보' : (weatherLive?'●기상청 단기예보':'●추정')))+'</span>'+
       '</div>'+
-      renderTable(hours, loc.indoor, sunTimes, step)+
+      (midSummary
+        ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary)
+        : renderTable(hours, loc.indoor, sunTimes, step)
+      )+
     '</div>';
 }
 
