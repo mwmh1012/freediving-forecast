@@ -71,6 +71,11 @@
   .loading{padding:30px 0;text-align:center;color:var(--foamDim);font-size:13px;}
   .warn-banner{display:flex;align-items:flex-start;gap:8px;background:rgba(232,86,62,.15);border:1px solid var(--coral);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--foam);}
   .warn-banner b{color:var(--coral);}
+  .advice-card{border-radius:14px;padding:16px 18px;margin-top:8px;font-size:14px;line-height:1.6;}
+  .advice-good{background:rgba(49,216,184,.12);border:1px solid var(--teal);}
+  .advice-warn{background:rgba(240,174,78,.12);border:1px solid var(--amber);}
+  .advice-bad{background:rgba(232,86,62,.12);border:1px solid var(--coral);}
+  .advice-title{font-weight:700;margin-bottom:6px;}
 
   @media (max-width: 640px){
     .wrap{padding:20px 14px 40px;}
@@ -104,7 +109,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.0)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.3)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -1012,6 +1017,63 @@ function renderMidRangeCard(data){
     '</div>' + taLine;
 }
 
+function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
+  if(loc.indoor || outOfRange) return null;
+  const SEA_RELEVANT = ['강풍','풍랑','폭풍해일','태풍'];
+  function isSeaWarning(label){ return SEA_RELEVANT.some(function(t){ return label.indexOf(t)>-1; }); }
+  const seaWarnings = warnings ? warnings.filter(function(w){ return isSeaWarning(w.label); }) : [];
+  const hasWarning = seaWarnings.length > 0;
+  const warnNames = hasWarning ? seaWarnings.map(function(w){return w.label;}).join(', ') : '';
+
+  if(midSummary){
+    const waveHigh = midSummary.split
+      ? Math.max(midSummary.whBAm||0, midSummary.whBPm||0)
+      : (midSummary.whB||0);
+    let level, msg;
+    if(hasWarning){
+      level='bad'; msg='이 기간에 <b>'+warnNames+'</b>이(가) 발효 중이에요. 입수 계획을 다시 확인해보세요.';
+    } else if(waveHigh>=1.5){
+      level='bad'; msg='파고가 1.5m를 넘을 것으로 예보돼요. 이 시기엔 입수를 권하지 않아요.';
+    } else if(waveHigh>=1){
+      level='warn'; msg='파고가 다소 높게 예보돼요. 중기예보는 날짜가 가까워질수록 정확해지니, 일정이 다가오면 다시 확인해보세요.';
+    } else {
+      level='good'; msg='현재 예보상으로는 무난한 편이에요. 다만 중기예보는 변동 가능성이 있으니, 일정이 다가오면 다시 확인해보시길 권해요.';
+    }
+    return {level:level, msg:msg};
+  }
+
+  const valid = hours.filter(function(h){ return h.wave!==null && h.wave!==undefined; });
+  if(valid.length===0) return null;
+  const maxWave = Math.max.apply(null, valid.map(function(h){return h.wave;}));
+  const windValid = valid.filter(function(h){return h.windSpeed!==null;});
+  const maxWind = windValid.length ? Math.max.apply(null, windValid.map(function(h){return h.windSpeed;})) : 0;
+  const rainyHours = valid.filter(function(h){return h.precip!==null && h.precip>=60;}).length;
+  const waterTemp = hours[0] ? hours[0].waterTemp : null;
+
+  let level, msg;
+  if(hasWarning){
+    level='bad'; msg='<b>'+warnNames+'</b>이(가) 발효 중이에요. 오늘은 입수를 권하지 않아요.';
+  } else if(maxWave>=1 || maxWind>=8){
+    level='bad'; msg='파고 또는 풍속이 주의 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 초보자는 오늘 입수를 피하시는 게 좋겠어요.';
+  } else if(maxWave>=0.5 || maxWind>=5 || rainyHours>0){
+    level='warn';
+    const reasons = [];
+    if(maxWave>=0.5) reasons.push('파고가 다소 있음('+maxWave.toFixed(1)+'m)');
+    if(maxWind>=5) reasons.push('바람이 다소 강함('+maxWind.toFixed(1)+'m/s)');
+    if(rainyHours>0) reasons.push('비 예보 있음(강수확률 60% 이상 구간 있음)');
+    msg = '오늘은 이런 점들이 있어요: <b>'+reasons.join(', ')+'</b>. 경험자는 무리 없지만, 처음이시라면 조건이 나은 시간대를 골라 들어가시길 권해요.';
+  } else {
+    level='good'; msg='오늘은 입수하기 좋은 날이에요. 파고·풍속 모두 안정적이에요.';
+  }
+  if(waterTemp!==null && waterTemp<16){
+    msg += ' 다만 수온이 낮은 편(약 '+Math.round(waterTemp)+'℃)이라, 웻슈트 보온에 신경 써주세요.';
+  }
+  return {level:level, msg:msg};
+}
+
+function advIcon(level){ return level==='good' ? '🟢' : (level==='warn' ? '🟡' : '🔴'); }
+function advTitle(level){ return level==='good' ? '오늘은 입수하기 좋아요' : (level==='warn' ? '주의가 필요해요' : '입수를 권하지 않아요'); }
+
 function daysBetween(dateStr, todayStr){
   function toDate(s){ return new Date(parseInt(s.slice(0,4),10), parseInt(s.slice(4,6),10)-1, parseInt(s.slice(6,8),10)); }
   const d1 = toDate(dateStr), d2 = toDate(todayStr);
@@ -1072,6 +1134,14 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
         )
       )+
     '</div>';
+
+  const advice = generateAdvice(loc, hours, warnings, midSummary, outOfRange);
+  if(advice){
+    el.innerHTML += '<div class="advice-card advice-'+advice.level+'">'+
+      '<div class="advice-title">'+advIcon(advice.level)+' '+advTitle(advice.level)+'</div>'+
+      '<div>'+advice.msg+'</div>'+
+    '</div>';
+  }
 }
 
 const map = L.map('map', {zoomControl:true}).setView([36.5,127.8], 7);
