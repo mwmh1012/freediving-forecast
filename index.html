@@ -132,7 +132,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v6.2)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -140,10 +140,6 @@
     <div style="display:flex;gap:8px;align-items:flex-start;">
       <span>⚠️</span>
       <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span>
-    </div>
-    <div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
-      <span>⚠️</span>
-      <b style="color:var(--coral);">화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장에서 한번 더 판단하시기 바랍니다.</b>
     </div>
   </div>
 
@@ -182,7 +178,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.0)</div>
   </div>
 </div>
 
@@ -1429,6 +1425,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
     el.innerHTML += '<div class="advice-card advice-'+advice.level+'">'+
       '<div class="advice-title">'+advIcon(advice.level)+' '+advTitle(advice.level)+'</div>'+
       '<div>'+advice.msg+'</div>'+
+      '<div style="font-size:11px;color:var(--foamDim);margin-top:10px;">*이 데이터들은 공식 안전기준이 아닙니다. 참고용으로만 활용하시고 실제 입수여부는 현장강사 및 버디의 판단에 따라 진행바랍니다.</div>'+
     '</div>';
   }
 }
