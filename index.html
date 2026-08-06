@@ -3,7 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>프리다이빙 지도 검색 · 시간대별 컨디션</title>
+<meta name="theme-color" content="#0B1A26" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<title>안따즐따 기상예보</title>
+<meta property="og:title" content="안따즐따 기상예보" />
+<meta property="og:description" content="지도로 찾는 프리다이빙 컨디션 — 검색·지도클릭으로 파고·풍속·조위 확인" />
+<meta property="og:image" content="https://mwmh1012.github.io/freediving-forecast/og-share.png" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://mwmh1012.github.io/freediving-forecast/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="안따즐따 기상예보" />
+<meta name="twitter:description" content="지도로 찾는 프리다이빙 컨디션" />
+<meta name="twitter:image" content="https://mwmh1012.github.io/freediving-forecast/og-share.png" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=94e7476ddb0a508a53d0ad64751087a2&libraries=services"></script>
@@ -71,6 +83,11 @@
   .loading{padding:30px 0;text-align:center;color:var(--foamDim);font-size:13px;}
   .spinner{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--teal);border-radius:50%;margin:0 auto 10px;animation:spin 0.8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
+  .mini-strip{display:flex;gap:6px;margin:10px 0 16px;}
+  .mini-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 4px;cursor:pointer;color:var(--foamDim);}
+  .mini-day:hover{border-color:var(--teal);}
+  .mini-day-active{background:var(--panel2);border-color:var(--teal);color:var(--foam);}
+  .mini-day-label{font-size:11px;font-family:ui-monospace,monospace;}
   .warn-banner{display:flex;align-items:flex-start;gap:8px;background:rgba(232,86,62,.15);border:1px solid var(--coral);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--foam);}
   .warn-banner b{color:var(--coral);}
   .advice-card{border-radius:14px;padding:16px 18px;margin-top:8px;font-size:14px;line-height:1.6;}
@@ -110,8 +127,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast (v4.3)</div>
-  <h1>지도로 찾는 프리다이빙 컨디션</h1>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v4.8)</div>
+  <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note" style="display:block;">
@@ -146,6 +163,12 @@
   <div id="map"></div>
 
   <div id="results"></div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+    <button class="star-btn" id="shareBtn" title="현재 지점·날짜 링크 복사"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>버디에게 공유하기</button>
+    <button id="addHomeBtn" class="star-btn">📱 홈 화면에 추가</button>
+  </div>
+  <div id="addHomeTip" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px;color:var(--foamDim);"></div>
 
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
@@ -376,6 +399,30 @@ function syncWithDb(loc){
   return loc;
 }
 
+function updateUrlState(loc, dateStr){
+  try{
+    const params = new URLSearchParams();
+    params.set('lat', loc.lat.toFixed(4));
+    params.set('lng', loc.lng.toFixed(4));
+    params.set('name', loc.name);
+    params.set('date', dateStr || currentDateStr());
+    history.replaceState(null, '', location.pathname + '?' + params.toString());
+  }catch(e){}
+}
+function parseUrlState(){
+  try{
+    const params = new URLSearchParams(location.search);
+    const lat = parseFloat(params.get('lat'));
+    const lng = parseFloat(params.get('lng'));
+    const name = params.get('name');
+    const date = params.get('date');
+    if(!isNaN(lat) && !isNaN(lng)){
+      return { loc: attachRegionCodes({name: name || (lat.toFixed(4)+', '+lng.toFixed(4)), lat:lat, lng:lng, indoor:false}), date: date };
+    }
+  }catch(e){}
+  return null;
+}
+
 function selectLocation(loc, opts){
   loc = syncWithDb(loc);
   if(!opts || !opts.silent){ searchInput.value = loc.name; }
@@ -383,6 +430,7 @@ function selectLocation(loc, opts){
   currentLoc = loc;
   addRecent(loc);
   updateFavToggle();
+  updateUrlState(loc, currentDateStr());
   loadAndRender(loc);
 }
 
@@ -757,12 +805,15 @@ async function loadAndRender(loc){
 
   const todayStrForMid = fmtYmd(new Date());
   const daysAheadForMid = daysBetween(dateStr, todayStrForMid);
-  let midSummary = null;
-  if(!loc.indoor && daysAheadForMid>=4 && daysAheadForMid<=10 && (loc.midSeaCode || loc.midLandCode)){
+  let midSummary = null, midDataRaw = null;
+  const midWindowNeeded = !loc.indoor && !outOfRange && (loc.midSeaCode || loc.midLandCode) && (daysAheadForMid+2 >= 4) && (daysAheadForMid-2 <= 10);
+  if(midWindowNeeded){
     try{
-      const midData = await fetchMidRangeData(loc);
-      midSummary = extractMidRangeForDay(midData, daysAheadForMid);
-    }catch(e){ midSummary = null; }
+      midDataRaw = await fetchMidRangeData(loc);
+      if(daysAheadForMid>=4 && daysAheadForMid<=10){
+        midSummary = extractMidRangeForDay(midDataRaw, daysAheadForMid);
+      }
+    }catch(e){ midDataRaw = null; midSummary = null; }
   }
 
   let warnings = [];
@@ -784,7 +835,7 @@ async function loadAndRender(loc){
     }catch(e){}
   }
 
-  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange);
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItems, midDataRaw);
 }
 
 function buildIndoorHours(){
@@ -1124,18 +1175,66 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
 function advIcon(level){ return level==='good' ? '🟢' : (level==='warn' ? '🟡' : '🔴'); }
 function advTitle(level){ return level==='good' ? '오늘은 입수하기 좋아요' : (level==='warn' ? '주의가 필요해요' : '입수를 권하지 않아요'); }
 
+function quickScoreForDate(targetDateStr, weatherItemsRaw, midDataRaw, loc, todayStr){
+  const daysAhead = daysBetween(targetDateStr, todayStr);
+  if(daysAhead < 0 || daysAhead > 10) return null;
+  if(loc.indoor) return 95;
+  if(daysAhead <= 3 && weatherItemsRaw){
+    const dayHours = buildHoursFromWeather(weatherItemsRaw, targetDateStr);
+    const valid = (dayHours||[]).filter(function(h){ return h && h.wave!==null && h.wave!==undefined; });
+    if(valid.length===0) return null;
+    const maxWave = Math.max.apply(null, valid.map(function(h){return h.wave;}));
+    const windValid = valid.filter(function(h){return h.windSpeed!==null;});
+    const maxWind = windValid.length ? Math.max.apply(null, windValid.map(function(h){return h.windSpeed;})) : 0;
+    if(maxWave>=1 || maxWind>=8) return 20;
+    if(maxWave>=0.5 || maxWind>=4) return 55;
+    return 90;
+  }
+  if(daysAhead>=4 && daysAhead<=10 && midDataRaw){
+    const d = extractMidRangeForDay(midDataRaw, daysAhead);
+    const waveHigh = d.split ? Math.max(d.whBAm||0, d.whBPm||0) : (d.whB||0);
+    if(waveHigh>=1.5) return 20;
+    if(waveHigh>=1) return 55;
+    if(waveHigh===0 && !d.split && d.whA==null && d.whB==null) return null; // no sea data at all (inland)
+    return 90;
+  }
+  return null;
+}
+
+function renderMiniStrip(centerDateStr, weatherItemsRaw, midDataRaw, loc, todayStr){
+  function shiftDate(dStr, n){
+    const y=parseInt(dStr.slice(0,4),10), m=parseInt(dStr.slice(4,6),10)-1, d=parseInt(dStr.slice(6,8),10);
+    const dt = new Date(y,m,d); dt.setDate(dt.getDate()+n);
+    return fmtYmd(dt);
+  }
+  let cardsHtml = '';
+  for(let off=-2; off<=2; off++){
+    const dStr = shiftDate(centerDateStr, off);
+    const isCenter = dStr === centerDateStr;
+    const score = quickScoreForDate(dStr, weatherItemsRaw, midDataRaw, loc, todayStr);
+    const col = score===null ? 'var(--foamDim)' : scoreColor(score);
+    const label = formatDateDisplay(dStr).slice(5); // MM.DD
+    cardsHtml += '<button class="mini-day'+(isCenter?' mini-day-active':'')+'" data-date="'+dStr+'">'+
+      '<span class="mini-day-label">'+label+'</span>'+
+      '<span class="dot" style="background:'+col+';width:10px;height:10px;"></span>'+
+      '</button>';
+  }
+  return '<div class="mini-strip">'+cardsHtml+'</div>';
+}
+
 function daysBetween(dateStr, todayStr){
   function toDate(s){ return new Date(parseInt(s.slice(0,4),10), parseInt(s.slice(4,6),10)-1, parseInt(s.slice(6,8),10)); }
   const d1 = toDate(dateStr), d2 = toDate(todayStr);
   return Math.round((d1-d2)/(1000*60*60*24));
 }
 
-function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange){
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItemsRaw, midDataRaw){
   const el = document.getElementById('results');
   const todayStr = fmtYmd(new Date());
   const isFutureDate = dateStr !== todayStr;
   const daysAhead = daysBetween(dateStr, todayStr);
   const step = daysAhead<=1 ? 2 : 3;
+  const miniStripHtml = renderMiniStrip(dateStr, weatherItemsRaw, midDataRaw, loc, todayStr);
   let warnCardBody;
   if(loc.indoor){
     warnCardBody = '<div style="color:var(--foamDim);font-size:13px;">실내 시설이라 특보 대상이 아니에요.</div>';
@@ -1154,7 +1253,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
   const warnCard = '<div class="card"><div class="card-head"><h3>기상특보 안내</h3></div>'+
     '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최근 6일 내 발효된 특보는 발효 시점을 표시하고, 그 이전부터 이어지고 있는 특보는 시점 없이 표시돼요</div>'+
     warnCardBody+'</div>';
-  el.innerHTML = warnCard +
+  el.innerHTML = miniStripHtml + warnCard +
     '<div class="card">'+
       '<div class="card-head">'+
         '<h3>'+loc.name+' · 조위(물높이) 그래프</h3>'+
@@ -1481,15 +1580,66 @@ document.addEventListener('click', function(e){ if(!document.querySelector('.sea
 document.getElementById('searchBtn').addEventListener('click', function(){ runSearch(searchInput.value.trim()); });
 searchInput.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); runSearch(searchInput.value.trim()); } });
 document.getElementById('favToggle').addEventListener('click', toggleFavorite);
-document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc) loadAndRender(currentLoc); });
+document.getElementById('shareBtn').addEventListener('click', async function(){
+  if(currentLoc) updateUrlState(currentLoc, currentDateStr());
+  const url = location.href;
+  const statusEl = document.getElementById('searchStatus');
+  try{
+    await navigator.clipboard.writeText(url);
+    if(statusEl){ statusEl.textContent = '링크를 복사했어요! 카톡 등에 붙여넣기 하시면 돼요.'; setTimeout(function(){ statusEl.textContent=''; }, 3000); }
+  }catch(e){
+    window.prompt('아래 링크를 복사해주세요:', url);
+  }
+});
+let deferredInstallPrompt = null;
+const addHomeBtn = document.getElementById('addHomeBtn');
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+addHomeBtn.addEventListener('click', async function(){
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    return;
+  }
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS){
+    alert('iOS는 자동 설치가 안 돼요.\n\nSafari 하단의 [공유] 버튼 → [홈 화면에 추가]를 눌러주세요.');
+  } else {
+    alert('이미 설치되어 있거나, 이 브라우저에서는 자동 설치가 지원되지 않아요.\n브라우저 메뉴(⋮)에서 "앱 설치" 또는 "홈 화면에 추가"를 찾아보세요.');
+  }
+});
+window.addEventListener('appinstalled', function(){ deferredInstallPrompt = null; });
+
+document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc){ updateUrlState(currentLoc, currentDateStr()); loadAndRender(currentLoc); } });
+document.getElementById('results').addEventListener('click', function(e){
+  const btn = e.target.closest('.mini-day');
+  if(!btn) return;
+  const dStr = btn.getAttribute('data-date');
+  if(!dStr || !currentLoc) return;
+  document.getElementById('dateInput').value = dStr.slice(0,4)+'-'+dStr.slice(4,6)+'-'+dStr.slice(6,8);
+  updateUrlState(currentLoc, dStr);
+  loadAndRender(currentLoc);
+});
 
 (async function init(){
-  document.getElementById('dateInput').value = new Date().toISOString().slice(0,10);
+  const urlState = parseUrlState();
+  if(urlState && urlState.date && urlState.date.length===8){
+    document.getElementById('dateInput').value = urlState.date.slice(0,4)+'-'+urlState.date.slice(4,6)+'-'+urlState.date.slice(6,8);
+  } else {
+    document.getElementById('dateInput').value = new Date().toISOString().slice(0,10);
+  }
   await loadStorage();
   renderRecent();
   renderFavorites();
-  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 장호항'; }) || DEFAULT_FAVORITES[0];
-  selectLocation(sample, {silent:true});
+  if(urlState && urlState.loc){
+    selectLocation(urlState.loc);
+  } else {
+    const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 장호항'; }) || DEFAULT_FAVORITES[0];
+    selectLocation(sample, {silent:true});
+  }
 })();
 </script>
 </body>
