@@ -110,13 +110,20 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast (v3.9)</div>
+  <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast (v4.3)</div>
   <h1>지도로 찾는 프리다이빙 컨디션</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
-  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.
-    <br/><b style="color:var(--coral);">⚠️ 화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장에서 한번 더 판단하시기 바랍니다.</b>
-  </span></div>
+  <div class="note" style="display:block;">
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      <span>⚠️</span>
+      <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
+      <span>⚠️</span>
+      <b style="color:var(--coral);">화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장에서 한번 더 판단하시기 바랍니다.</b>
+    </div>
+  </div>
 
   <div class="controls">
     <div class="search-box">
@@ -142,7 +149,7 @@
 
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
-    기상청 데이터가 일부만 있는 시간대는 있는 만큼만 표시하고 나머지는 "-"로 비워둬요. 그 날짜에 기상청 데이터가 아예 없으면(대략 오늘부터 3일 이후) 하루 전체가 추정치로 표시돼요.
+    조회 날짜에 따라 이렇게 나와요 — <b>오늘~3일 뒤</b>: 시간대별 상세 표(일부만 있으면 있는 만큼만 표시, 나머지는 "-"). <b>4~10일 뒤</b>: 기상청 중기예보로 오전/오후 요약(파고는 해안 지역에서만 제공). <b>11일 뒤 이후</b>: 예보 자체가 없어 안내 문구만 표시돼요.
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
@@ -174,7 +181,7 @@ const LOCATIONS_DB = [
   {name:'강원 동해 도째비골 해랑전망대', lat:37.5541, lng:129.1208, type:'전망대', aliases:['도째비골'], obsCode:'DT_0006'},
   {name:'강원 삼척 장호항', lat:37.2882, lng:129.3176, type:'항구', aliases:['장호항','장호'], obsCode:'DT_0006'},
   {name:'강원 삼척 갈남항', lat:37.2806, lng:129.3252, type:'항구', aliases:['갈남','갈남항','삼척 갈남'], obsCode:'DT_0006'},
-  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, type:'해변', aliases:['하조대'], obsCode:'DT_0012'},
+  {name:'강원 양양 하조대해변', lat:38.0244, lng:128.7233, type:'해변', aliases:['하조대'], obsCode:'DT_0012'},
   {name:'강원 강릉 영진해변', lat:37.8690, lng:128.8456, type:'해변', aliases:['영진','영진해변'], obsCode:'DT_0006'},
   {name:'강원 고성 문암해변', lat:38.2966, lng:128.5494, type:'해변', aliases:['문암','문암해변'], obsCode:'DT_0012'},
   {name:'강원 고성 천진해수욕장', lat:38.2594, lng:128.5598, type:'해수욕장', aliases:['천진','천진해수욕장'], obsCode:'DT_0012'},
@@ -286,7 +293,7 @@ LOCATIONS_DB.forEach(function(l){
 
 const DEFAULT_FAVORITES = [
   {name:'강원 삼척 장호항', lat:37.2882, lng:129.3176, obsCode:'DT_0006', areaCode:'S1151000', landAreaCode:'L1022000', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20602'},
-  {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, obsCode:'DT_0012', areaCode:'S1151000', landAreaCode:'L1022300', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20403'},
+  {name:'강원 양양 하조대해변', lat:38.0244, lng:128.7233, obsCode:'DT_0012', areaCode:'S1151000', landAreaCode:'L1022300', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20403'},
   {name:'강원 고성 송지호해변', lat:38.3313, lng:128.5279, obsCode:'DT_0012', areaCode:'S1151000', landAreaCode:'L1022200', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20402'},
   {name:'경북 울진 망양휴게소', lat:36.8731, lng:129.4213, obsCode:'DT_0011', areaCode:'S1131000', landAreaCode:'L1073000', midSeaCode:'12C10000', midLandCode:'11H10000', midTaCode:'11H10101'},
   {name:'경북 울진 봉수항(죽변)', lat:37.0649, lng:129.4257, obsCode:'DT_0011', areaCode:'S1131000', landAreaCode:'L1073000', midSeaCode:'12C10000', midLandCode:'11H10000', midTaCode:'11H10101'},
@@ -369,8 +376,9 @@ function syncWithDb(loc){
   return loc;
 }
 
-function selectLocation(loc){
+function selectLocation(loc, opts){
   loc = syncWithDb(loc);
+  if(!opts || !opts.silent){ searchInput.value = loc.name; }
   setMarker(loc.lat, loc.lng, loc.name);
   currentLoc = loc;
   addRecent(loc);
@@ -882,12 +890,6 @@ function renderWaveSVG(hours, indoor, step){
     midLine = '<line x1="'+padX+'" y1="'+midY+'" x2="'+(W-padX)+'" y2="'+midY+'" stroke="'+C.amber+'" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.8"/>'+
       '<text x="'+(W-padX)+'" y="'+(midY-6)+'" font-size="9" fill="'+C.amber+'" text-anchor="end">0.7m 주의필요</text>';
   }
-  let goLine = '';
-  if(max > 0.5){
-    const goY = yOf(0.5);
-    goLine = '<line x1="'+padX+'" y1="'+goY+'" x2="'+(W-padX)+'" y2="'+goY+'" stroke="'+C.foam+'" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.75"/>'+
-      '<text x="'+(W-padX)+'" y="'+(goY-6)+'" font-size="9" fill="'+C.foam+'" text-anchor="end">0.5m 입수가능</text>';
-  }
 
 
   let markersG = '';
@@ -905,7 +907,6 @@ function renderWaveSVG(hours, indoor, step){
     axisG+
     thresholdLine+
     midLine+
-    goLine+
     '<path d="'+areaPath+'" fill="url(#wf2)"/>'+
     '<path d="'+linePath+'" fill="none" stroke="'+C.teal+'" stroke-width="2"/>'+
     markersG+
@@ -1488,7 +1489,7 @@ document.getElementById('dateInput').addEventListener('change', function(){ if(c
   renderRecent();
   renderFavorites();
   const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 장호항'; }) || DEFAULT_FAVORITES[0];
-  selectLocation(sample);
+  selectLocation(sample, {silent:true});
 })();
 </script>
 </body>
