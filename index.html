@@ -132,7 +132,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.9)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v6.0)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -800,8 +800,8 @@ function hourScore(row){
   if(row.sky==="실내") return 95;
   if(row.missing) return null;
   let s=100;
-  s -= row.wave>1?30:row.wave>0.5?12:0;
-  s -= row.windSpeed>=8?30:row.windSpeed>=4?12:0;
+  if(row.wave>=1 || row.windSpeed>=8) s = 40;
+  else if(row.wave>=0.7 || row.windSpeed>=6) s = 65;
   s -= row.precip>60?10:0;
   return Math.max(0,Math.round(s));
 }
@@ -1212,12 +1212,12 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
 
   function waveNote(w){
     if(w>=0.7) return '파고 '+w.toFixed(1)+'m — 0.7m를 넘어 너울 영향이 커질 수 있어요(너울 주기 확인 권장)';
-    if(w>=0.5) return '파고 '+w.toFixed(1)+'m — 0.5~0.7m 구간이에요(너울 주기 확인 권장)';
+    if(w>=0.6) return '파고 '+w.toFixed(1)+'m — 0.6~0.7m 구간이에요(너울 주기 확인 권장)';
     return null;
   }
   function windNote(w){
     if(w>=6) return '풍속 '+w.toFixed(1)+'m/s — 6m/s를 넘어 전반적으로 요주의 구간이에요';
-    if(w>=4) return '풍속 '+w.toFixed(1)+'m/s — 4~6m/s 구간이에요(파고·풍향을 함께 보고 판단하세요: 육풍이면 표류 주의, 해풍이면 파도·입출수 주의)';
+    if(w>=5) return '풍속 '+w.toFixed(1)+'m/s — 5~6m/s 구간이에요(파고·풍향을 함께 보고 판단하세요: 육풍이면 표류 주의, 해풍이면 파도·입출수 주의)';
     return null;
   }
   function evalLevel(mw, mwd, rh){
