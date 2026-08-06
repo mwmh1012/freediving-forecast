@@ -110,11 +110,13 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.7)</span></h1>
+  <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast (v3.9)</div>
+  <h1>지도로 찾는 프리다이빙 컨디션</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
-  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
+  <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.
+    <br/><b style="color:var(--coral);">⚠️ 화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장에서 한번 더 판단하시기 바랍니다.</b>
+  </span></div>
 
   <div class="controls">
     <div class="search-box">
@@ -141,8 +143,10 @@
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
     기상청 데이터가 일부만 있는 시간대는 있는 만큼만 표시하고 나머지는 "-"로 비워둬요. 그 날짜에 기상청 데이터가 아예 없으면(대략 오늘부터 3일 이후) 하루 전체가 추정치로 표시돼요.
-    화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장 강사·버디의 판단이 우선입니다.
-    <br/>바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
+    <div style="margin-top:4px;">
+      바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
+    </div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com</div>
   </div>
 </div>
 
@@ -881,8 +885,8 @@ function renderWaveSVG(hours, indoor, step){
   let goLine = '';
   if(max > 0.5){
     const goY = yOf(0.5);
-    goLine = '<line x1="'+padX+'" y1="'+goY+'" x2="'+(W-padX)+'" y2="'+goY+'" stroke="'+C.foam+'" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>'+
-      '<text x="'+(W-padX)+'" y="'+(goY-6)+'" font-size="9" fill="'+C.foamDim+'" text-anchor="end">0.5m 입수가능</text>';
+    goLine = '<line x1="'+padX+'" y1="'+goY+'" x2="'+(W-padX)+'" y2="'+goY+'" stroke="'+C.foam+'" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.75"/>'+
+      '<text x="'+(W-padX)+'" y="'+(goY-6)+'" font-size="9" fill="'+C.foam+'" text-anchor="end">0.5m 입수가능</text>';
   }
 
 
