@@ -127,7 +127,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.0)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.1)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -1584,10 +1584,20 @@ document.getElementById('favToggle').addEventListener('click', toggleFavorite);
 document.getElementById('shareBtn').addEventListener('click', async function(){
   if(currentLoc) updateUrlState(currentLoc, currentDateStr());
   const url = location.href;
-  const statusEl = document.getElementById('searchStatus');
+  const title = (currentLoc ? currentLoc.name + ' ' : '') + '프리다이빙 컨디션';
+  const statusEl = document.getElementById('shareStatus');
+  if(navigator.share){
+    try{
+      await navigator.share({ title: title, text: title, url: url });
+      return;
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // user cancelled the share sheet
+      // fall through to clipboard fallback below
+    }
+  }
   try{
     await navigator.clipboard.writeText(url);
-    if(statusEl){ statusEl.textContent = '링크를 복사했어요! 카톡 등에 붙여넣기 하시면 돼요.'; setTimeout(function(){ statusEl.textContent=''; }, 3000); }
+    if(statusEl){ statusEl.textContent = '✓ 링크를 복사했어요!'; setTimeout(function(){ statusEl.textContent=''; }, 3000); }
   }catch(e){
     window.prompt('아래 링크를 복사해주세요:', url);
   }
