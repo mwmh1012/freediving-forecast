@@ -178,7 +178,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.1)</div>
   </div>
 </div>
 
@@ -1586,6 +1586,14 @@ function attachRegionCodes(loc){
   if(nearest){
     if(nearest.dist < 50 && nearest.entry.areaCode) loc.areaCode = nearest.entry.areaCode;
     if(nearest.dist < 25 && nearest.entry.landAreaCode) loc.landAreaCode = nearest.entry.landAreaCode;
+    // tight-radius fallback for mid-range codes only — rescues genuine coastal clicks
+    // that Kakao couldn't reverse-geocode (e.g. clicking open water just offshore),
+    // without the wide radius that previously let inland points inherit bogus wave data
+    if(nearest.dist < 5){
+      if(nearest.entry.midSeaCode) loc.midSeaCode = loc.midSeaCode || nearest.entry.midSeaCode;
+      if(nearest.entry.midLandCode) loc.midLandCode = loc.midLandCode || nearest.entry.midLandCode;
+      if(nearest.entry.midTaCode) loc.midTaCode = loc.midTaCode || nearest.entry.midTaCode;
+    }
   }
   return loc;
 }
