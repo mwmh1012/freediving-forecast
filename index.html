@@ -51,6 +51,11 @@
   .section-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--foamDim);margin:16px 0 8px;}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
   .chip{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);color:var(--foamDim);font-size:12px;padding:6px 8px 6px 12px;border-radius:999px;cursor:pointer;}
+  .fav-group{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden;}
+  .fav-group-header{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--panel);border:none;color:var(--foam);font-size:13px;font-weight:700;padding:10px 14px;cursor:pointer;text-align:left;}
+  .fav-group-header:hover{background:var(--panel2);}
+  .fav-caret{color:var(--foamDim);font-size:11px;}
+  .fav-group-body{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;background:var(--panel2);}
   .chip:hover{color:var(--foam);border-color:var(--teal);}
   .chip .x{color:var(--foamDim);opacity:.6;font-size:13px;line-height:1;padding:2px 4px;border-radius:50%;}
   .chip .x:hover{opacity:1;color:var(--coral);background:rgba(232,86,62,.15);}
@@ -127,7 +132,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.2)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.8)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -157,7 +162,7 @@
   <div class="section-label">최근 검색</div>
   <div class="chips" id="recentChips"></div>
 
-  <div class="section-label">즐겨찾는 곳 (최대 10곳)</div>
+  <div class="section-label">즐겨찾는 곳 (최대 100곳)</div>
   <div class="chips" id="favChips"></div>
 
   <div id="map"></div>
@@ -328,18 +333,18 @@ let favList = [];
 let currentLoc = null;
 
 async function loadStorage(){
-  try{ const r = await window.storage.get('recent'); recentList = r ? JSON.parse(r.value) : []; }catch(e){ recentList = []; }
-  try{ const f = await window.storage.get('favorites'); favList = f ? JSON.parse(f.value) : null; }catch(e){ favList = null; }
+  try{ const r = localStorage.getItem('recent'); recentList = r ? JSON.parse(r) : []; }catch(e){ recentList = []; }
+  try{ const f = localStorage.getItem('favorites'); favList = f ? JSON.parse(f) : null; }catch(e){ favList = null; }
   if(!favList){ favList = DEFAULT_FAVORITES.slice(); saveFavorites(); }
 }
-async function saveRecent(){ try{ await window.storage.set('recent', JSON.stringify(recentList)); }catch(e){} }
-async function saveFavorites(){ try{ await window.storage.set('favorites', JSON.stringify(favList)); }catch(e){} }
+async function saveRecent(){ try{ localStorage.setItem('recent', JSON.stringify(recentList)); }catch(e){} }
+async function saveFavorites(){ try{ localStorage.setItem('favorites', JSON.stringify(favList)); }catch(e){} }
 
 function sameLoc(a,b){ return Math.abs(a.lat-b.lat)<0.0008 && Math.abs(a.lng-b.lng)<0.0008; }
 function addRecent(loc){
   recentList = recentList.filter(l=>!sameLoc(l,loc));
   recentList.unshift({name:loc.name, lat:loc.lat, lng:loc.lng, indoor:!!loc.indoor, obsCode:loc.obsCode||null, areaCode:loc.areaCode||null, landAreaCode:loc.landAreaCode||null, midSeaCode:loc.midSeaCode||null, midLandCode:loc.midLandCode||null, midTaCode:loc.midTaCode||null});
-  recentList = recentList.slice(0,5);
+  recentList = recentList.slice(0,10);
   saveRecent(); renderRecent();
 }
 function isFavorite(loc){ return favList.some(l=>sameLoc(l,loc)); }
@@ -348,7 +353,7 @@ function toggleFavorite(){
   if(isFavorite(currentLoc)){
     favList = favList.filter(l=>!sameLoc(l,currentLoc));
   } else {
-    if(favList.length>=10){ document.getElementById('searchStatus').textContent = '즐겨찾기는 최대 10곳까지 저장할 수 있어요.'; return; }
+    if(favList.length>=100){ document.getElementById('searchStatus').textContent = '즐겨찾기는 최대 100곳까지 저장할 수 있어요.'; return; }
     favList.push({name:currentLoc.name, lat:currentLoc.lat, lng:currentLoc.lng, indoor:!!currentLoc.indoor, obsCode:currentLoc.obsCode||null, areaCode:currentLoc.areaCode||null, landAreaCode:currentLoc.landAreaCode||null, midSeaCode:currentLoc.midSeaCode||null, midLandCode:currentLoc.midLandCode||null, midTaCode:currentLoc.midTaCode||null});
   }
   saveFavorites(); renderFavorites(); updateFavToggle();
@@ -369,21 +374,83 @@ function renderRecent(){
     el.appendChild(b);
   });
 }
+let favOpenGroup = null;
+let favExpandAll = false;
+
+function groupNameForLoc(loc){
+  if(!loc.landAreaCode) return '기타';
+  if(loc.landAreaCode.indexOf('L109')===0) return '제주';
+  return (typeof CODE_TO_NAME !== 'undefined' && CODE_TO_NAME[loc.landAreaCode]) || '기타';
+}
+
 function renderFavorites(){
   const el = document.getElementById('favChips');
   if(favList.length===0){ el.innerHTML = '<span class="empty-hint">즐겨찾는 곳이 없어요.</span>'; return; }
-  el.innerHTML = '';
-  favList.forEach(loc=>{
-    const b = document.createElement('button'); b.className='chip';
-    b.innerHTML = `<span>${loc.name}</span><span class="x" data-remove="1">✕</span>`;
-    b.addEventListener('click', (e)=>{
-      if(e.target.dataset.remove){
-        favList = favList.filter(l=>!sameLoc(l,loc));
-        saveFavorites(); renderFavorites(); updateFavToggle();
-      } else { selectLocation(loc); }
-    });
-    el.appendChild(b);
+
+  const groups = {};
+  favList.forEach(function(loc){
+    const g = groupNameForLoc(loc);
+    if(!groups[g]) groups[g] = [];
+    groups[g].push(loc);
   });
+  const groupNames = Object.keys(groups).sort(function(a,b){
+    if(a==='기타') return 1;
+    if(b==='기타') return -1;
+    const maxA = Math.max.apply(null, groups[a].map(function(l){return l.lat;}));
+    const maxB = Math.max.apply(null, groups[b].map(function(l){return l.lat;}));
+    return maxB - maxA;
+  });
+
+  let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">'+
+    '<button class="star-btn" id="favExpandAllBtn" style="font-size:12px;padding:4px 10px;">'+(favExpandAll?'전체닫기':'전체보기')+'</button>'+
+  '</div>';
+
+  groupNames.forEach(function(g){
+    const isOpen = favExpandAll || (favOpenGroup === g);
+    html += '<div class="fav-group">'+
+      '<button class="fav-group-header" data-group="'+g+'">'+
+        '<span>'+g+' ('+groups[g].length+')</span><span class="fav-caret">'+(isOpen?'▲':'▼')+'</span>'+
+      '</button>'+
+      (isOpen ? ('<div class="fav-group-body">'+
+        groups[g].map(function(loc){
+          return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
+        }).join('') +
+      '</div>') : '')+
+    '</div>';
+  });
+
+  el.innerHTML = html;
+
+  el.querySelectorAll('.fav-group-header').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const g = btn.getAttribute('data-group');
+      if(favExpandAll){ favExpandAll = false; favOpenGroup = g; }
+      else { favOpenGroup = (favOpenGroup === g) ? null : g; }
+      renderFavorites();
+    });
+  });
+  el.querySelectorAll('.fav-group-body .chip').forEach(function(chipBtn){
+    const lat = parseFloat(chipBtn.getAttribute('data-lat'));
+    const lng = parseFloat(chipBtn.getAttribute('data-lng'));
+    const loc = favList.find(function(l){ return sameLoc(l, {lat:lat, lng:lng}); });
+    if(!loc) return;
+    chipBtn.addEventListener('click', function(e){
+      if(e.target.dataset.remove){
+        favList = favList.filter(function(l){ return !sameLoc(l, loc); });
+        saveFavorites(); renderFavorites(); updateFavToggle();
+      } else {
+        selectLocation(loc);
+      }
+    });
+  });
+  const expandBtn = document.getElementById('favExpandAllBtn');
+  if(expandBtn){
+    expandBtn.addEventListener('click', function(){
+      favExpandAll = !favExpandAll;
+      if(!favExpandAll) favOpenGroup = null;
+      renderFavorites();
+    });
+  }
 }
 
 function syncWithDb(loc){
@@ -969,13 +1036,15 @@ function riskyText(text, isRisky){
   return isRisky ? '<span style="color:var(--coral);font-weight:700">'+text+'</span>' : text;
 }
 
-function nearestColumnHour(hhmm){
+function nearestColumnHour(hhmm, step){
+  step = step || 2;
   const parts = hhmm.split(':');
   const hh = parseInt(parts[0],10), mm = parseInt(parts[1],10);
   const totalHour = hh + mm/60;
-  let nearest = Math.round(totalHour/2)*2;
-  if(nearest>22) nearest=22;
-  if(nearest<0) nearest=0;
+  let nearest = Math.round(totalHour/step)*step;
+  const maxCol = Math.floor(23/step)*step;
+  if(nearest>maxCol) nearest = maxCol;
+  if(nearest<0) nearest = 0;
   return nearest;
 }
 
@@ -985,8 +1054,8 @@ function renderTable(hours, indoor, sunTimes, step){
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
   let sunRow = '';
   if(!indoor && sunTimes){
-    const sunriseCol = nearestColumnHour(sunTimes.sunrise);
-    const sunsetCol = nearestColumnHour(sunTimes.sunset);
+    const sunriseCol = nearestColumnHour(sunTimes.sunrise, step);
+    const sunsetCol = nearestColumnHour(sunTimes.sunset, step);
     sunRow = '<tr><td class="row-label">일출/일몰</td>' + twoHourly.map(function(h){
       const parts = [];
       if(h.hour === sunriseCol) parts.push('🌅'+sunTimes.sunrise);
@@ -1151,24 +1220,64 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
     if(w>=4) return '풍속 '+w.toFixed(1)+'m/s — 4~6m/s 구간이에요(파고·풍향을 함께 보고 판단하세요: 육풍이면 표류 주의, 해풍이면 파도·입출수 주의)';
     return null;
   }
+  function evalLevel(mw, mwd, rh){
+    if(mw>=1 || mwd>=8) return 'bad';
+    if(mw>=0.7 || mwd>=6 || rh>0) return 'warn';
+    return 'good';
+  }
+  function buildReasons(mw, mwd, rh){
+    const reasons = [];
+    const wNote = waveNote(mw); if(wNote) reasons.push(wNote);
+    const wiNote = windNote(mwd); if(wiNote) reasons.push(wiNote);
+    if(rh>0) reasons.push('비 예보 있음(강수확률 60% 이상 구간 있음)');
+    return reasons;
+  }
+  function evalSegment(list){
+    if(list.length===0) return null;
+    const mw = Math.max.apply(null, list.map(function(h){return h.wave;}));
+    const wv = list.filter(function(h){return h.windSpeed!==null;});
+    const mwd = wv.length ? Math.max.apply(null, wv.map(function(h){return h.windSpeed;})) : 0;
+    const rh = list.filter(function(h){return h.precip!==null && h.precip>=60;}).length;
+    return { level: evalLevel(mw,mwd,rh), maxWave:mw, maxWind:mwd, rainyHours:rh };
+  }
+  function levelText(lv){ return lv==='good'?'좋음':(lv==='warn'?'주의':'비추천'); }
+  function levelIcon(lv){ return lv==='good'?'🟢':(lv==='warn'?'🟡':'🔴'); }
+  const levelRank = {good:0, warn:1, bad:2};
+
+  const amEval = evalSegment(valid.filter(function(h){return h.hour<12;}));
+  const pmEval = evalSegment(valid.filter(function(h){return h.hour>=12;}));
 
   let level, msg;
   if(hasWarning){
     level='bad'; msg='<b>'+warnNames+'</b>이(가) 발효 중이에요. 오늘은 입수를 권하지 않아요.';
-  } else if(maxWave>=1 || maxWind>=8){
-    level='bad'; msg='파고 또는 풍속이 위험 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 특별한 이유가 없다면 오늘은 입수를 권하지 않아요.';
-  } else if(maxWave>=0.7 || maxWind>=6 || rainyHours>0){
-    level='warn';
-    const reasons = [];
-    const wNote = waveNote(maxWave); if(wNote) reasons.push(wNote);
-    const wiNote = windNote(maxWind); if(wiNote) reasons.push(wiNote);
-    if(rainyHours>0) reasons.push('비 예보 있음(강수확률 60% 이상 구간 있음)');
-    msg = '오늘은 이런 점들이 있어요: <b>'+reasons.join(' · ')+'</b>. 경험자는 무리 없지만, 처음이시라면 조건이 나은 시간대를 골라 들어가시길 권해요.';
+  } else if(amEval && pmEval && amEval.level === pmEval.level){
+    level = amEval.level;
+    if(level==='bad'){
+      msg = '파고 또는 풍속이 위험 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 특별한 이유가 없다면 오늘은 입수를 권하지 않아요.';
+    } else if(level==='warn'){
+      const reasons = buildReasons(maxWave, maxWind, rainyHours);
+      msg = '오늘은 이런 점들이 있어요: <b>'+reasons.join(' · ')+'</b>. 경험자는 무리 없지만, 처음이시라면 조건이 나은 시간대를 골라 들어가시길 권해요.';
+    } else {
+      msg = '오늘은 입수하기 좋은 날이에요. 파고·풍속 모두 안정적이에요.';
+    }
+  } else if(amEval || pmEval){
+    const parts = [];
+    if(amEval){
+      const reasons = buildReasons(amEval.maxWave, amEval.maxWind, amEval.rainyHours);
+      parts.push(levelIcon(amEval.level)+' <b>오전</b>: '+(reasons.length ? reasons.join(' · ') : levelText(amEval.level)));
+    }
+    if(pmEval){
+      const reasons = buildReasons(pmEval.maxWave, pmEval.maxWind, pmEval.rainyHours);
+      parts.push(levelIcon(pmEval.level)+' <b>오후</b>: '+(reasons.length ? reasons.join(' · ') : levelText(pmEval.level)));
+    }
+    const worst = [amEval, pmEval].filter(Boolean).reduce(function(a,b){ return levelRank[b.level]>levelRank[a.level] ? b : a; });
+    level = worst.level;
+    msg = parts.join('<br>');
   } else {
-    level='good'; msg='오늘은 입수하기 좋은 날이에요. 파고·풍속 모두 안정적이에요.';
+    return null;
   }
   if(waterTemp!==null && waterTemp<16){
-    msg += ' 다만 수온이 낮은 편(약 '+Math.round(waterTemp)+'℃)이라, 웻슈트 보온에 신경 써주세요.';
+    msg += '<br>다만 수온이 낮은 편(약 '+Math.round(waterTemp)+'℃)이라, 웻슈트 보온에 신경 써주세요.';
   }
   return {level:level, msg:msg};
 }
