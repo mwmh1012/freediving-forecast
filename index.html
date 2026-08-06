@@ -109,7 +109,7 @@
 <body>
 <div class="wrap">
   <div class="eyebrow"><span class="rule"></span>Map Search · Hourly Marine Forecast</div>
-  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.5)</span></h1>
+  <h1>지도로 찾는 프리다이빙 컨디션<span style="font-size:14px;font-weight:400;color:var(--foamDim);margin-left:8px;">(v3.6)</span></h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
   <div class="note">⚠️ <span><b>기상청(파고·풍속·풍향·기온·하늘·강수)과 국립해양조사원(조위) 데이터는 실시간 API로 가져와요.</b> <b>표층수온만 계절 평균 기반 추정치</b>예요. 카드마다 <span style="color:var(--teal)">●실시간</span> / <span style="color:var(--amber)">●추정</span> 배지로 구분해뒀어요. 파고는 풍랑·너울을 구분하지 않은 합산 수치예요.</span></div>
@@ -140,6 +140,7 @@
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
     기상청 데이터가 일부만 있는 시간대는 있는 만큼만 표시하고 나머지는 "-"로 비워둬요. 그 날짜에 기상청 데이터가 아예 없으면(대략 오늘부터 3일 이후) 하루 전체가 추정치로 표시돼요.
     화면의 빨간 숫자·주의선은 AIDA2(개방수역 입문) 기준을 참고한 값이며, 공식 안전 기준이 아닙니다. 실제 입수 여부는 항상 현장 강사·버디의 판단이 우선입니다.
+    <br/>바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
   </div>
 </div>
 
@@ -199,6 +200,9 @@ const LOCATIONS_DB = [
   {name:'인천 강화 동막해변', lat:37.5926, lng:126.4582, type:'해변', aliases:['동막','강화'], obsCode:'DT_0032'},
   {name:'용인 딥스테이션(실내)', lat:37.24, lng:127.20, type:'실내', aliases:['딥스테이션','용인'], indoor:true},
   {name:'경기 가평 K-26 다이브풀(실내)', lat:37.7029, lng:127.5163, type:'실내', aliases:['k26','케이26','가평'], indoor:true},
+  {name:'강원 고성 송지호해변', lat:38.3313, lng:128.5279, type:'해변', aliases:['송지호','송지호해변'], obsCode:'DT_0012'},
+  {name:'경북 울진 망양휴게소', lat:36.8731, lng:129.4213, type:'포인트', aliases:['망양휴게소','망양'], obsCode:'DT_0011'},
+  {name:'경북 울진 봉수항(죽변)', lat:37.0649, lng:129.4257, type:'항구', aliases:['봉수항','죽변'], obsCode:'DT_0011'},
 ];
 
 LOCATIONS_DB.forEach(function(l){
@@ -275,8 +279,11 @@ LOCATIONS_DB.forEach(function(l){
 });
 
 const DEFAULT_FAVORITES = [
-  {name:'강원 삼척 갈남항', lat:37.2806, lng:129.3252, obsCode:'DT_0006', areaCode:'S1151000', landAreaCode:'L1022000', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20602'},
+  {name:'강원 삼척 장호항', lat:37.2882, lng:129.3176, obsCode:'DT_0006', areaCode:'S1151000', landAreaCode:'L1022000', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20602'},
   {name:'강원 양양 하조대해변', lat:38.170, lng:128.760, obsCode:'DT_0012', areaCode:'S1151000', landAreaCode:'L1022300', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20403'},
+  {name:'강원 고성 송지호해변', lat:38.3313, lng:128.5279, obsCode:'DT_0012', areaCode:'S1151000', landAreaCode:'L1022200', midSeaCode:'12C20000', midLandCode:'11D20000', midTaCode:'11D20402'},
+  {name:'경북 울진 망양휴게소', lat:36.8731, lng:129.4213, obsCode:'DT_0011', areaCode:'S1131000', landAreaCode:'L1073000', midSeaCode:'12C10000', midLandCode:'11H10000', midTaCode:'11H10101'},
+  {name:'경북 울진 봉수항(죽변)', lat:37.0649, lng:129.4257, obsCode:'DT_0011', areaCode:'S1131000', landAreaCode:'L1073000', midSeaCode:'12C10000', midLandCode:'11H10000', midTaCode:'11H10101'},
 ];
 
 let recentList = [];
@@ -649,7 +656,7 @@ function hourScore(row){
   if(row.missing) return null;
   let s=100;
   s -= row.wave>1?30:row.wave>0.5?12:0;
-  s -= row.windSpeed>9?30:row.windSpeed>5?12:0;
+  s -= row.windSpeed>=8?30:row.windSpeed>=4?12:0;
   s -= row.precip>60?10:0;
   return Math.max(0,Math.round(s));
 }
@@ -849,10 +856,10 @@ function renderWaveSVG(hours, indoor, step){
       '<text x="'+(W-padX)+'" y="'+(thresholdY-6)+'" font-size="9" fill="'+C.coral+'" text-anchor="end">1m 주의선</text>';
   }
   let midLine = '';
-  if(max > 0.5){
-    const midY = yOf(0.5);
+  if(max > 0.7){
+    const midY = yOf(0.7);
     midLine = '<line x1="'+padX+'" y1="'+midY+'" x2="'+(W-padX)+'" y2="'+midY+'" stroke="'+C.amber+'" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.8"/>'+
-      '<text x="'+(W-padX)+'" y="'+(midY-6)+'" font-size="9" fill="'+C.amber+'" text-anchor="end">0.5m</text>';
+      '<text x="'+(W-padX)+'" y="'+(midY-6)+'" font-size="9" fill="'+C.amber+'" text-anchor="end">0.7m</text>';
   }
 
   let markersG = '';
@@ -1052,18 +1059,29 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
   const rainyHours = valid.filter(function(h){return h.precip!==null && h.precip>=60;}).length;
   const waterTemp = hours[0] ? hours[0].waterTemp : null;
 
+  function waveNote(w){
+    if(w>=0.7) return '파고 '+w.toFixed(1)+'m — 0.7m를 넘어 너울 영향이 커질 수 있어요(너울 주기 확인 권장)';
+    if(w>=0.5) return '파고 '+w.toFixed(1)+'m — 0.5~0.7m 구간이에요(너울 주기 확인 권장)';
+    return null;
+  }
+  function windNote(w){
+    if(w>=6) return '풍속 '+w.toFixed(1)+'m/s — 6m/s를 넘어 전반적으로 요주의 구간이에요';
+    if(w>=4) return '풍속 '+w.toFixed(1)+'m/s — 4~6m/s 구간이에요(파고·풍향을 함께 보고 판단하세요: 육풍이면 표류 주의, 해풍이면 파도·입출수 주의)';
+    return null;
+  }
+
   let level, msg;
   if(hasWarning){
     level='bad'; msg='<b>'+warnNames+'</b>이(가) 발효 중이에요. 오늘은 입수를 권하지 않아요.';
   } else if(maxWave>=1 || maxWind>=8){
-    level='bad'; msg='파고 또는 풍속이 주의 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 초보자는 오늘 입수를 피하시는 게 좋겠어요.';
-  } else if(maxWave>=0.5 || maxWind>=5 || rainyHours>0){
+    level='bad'; msg='파고 또는 풍속이 위험 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 특별한 이유가 없다면 오늘은 입수를 권하지 않아요.';
+  } else if(maxWave>=0.5 || maxWind>=4 || rainyHours>0){
     level='warn';
     const reasons = [];
-    if(maxWave>=0.5) reasons.push('파고가 다소 있음('+maxWave.toFixed(1)+'m)');
-    if(maxWind>=5) reasons.push('바람이 다소 강함('+maxWind.toFixed(1)+'m/s)');
+    const wNote = waveNote(maxWave); if(wNote) reasons.push(wNote);
+    const wiNote = windNote(maxWind); if(wiNote) reasons.push(wiNote);
     if(rainyHours>0) reasons.push('비 예보 있음(강수확률 60% 이상 구간 있음)');
-    msg = '오늘은 이런 점들이 있어요: <b>'+reasons.join(', ')+'</b>. 경험자는 무리 없지만, 처음이시라면 조건이 나은 시간대를 골라 들어가시길 권해요.';
+    msg = '오늘은 이런 점들이 있어요: <b>'+reasons.join(' · ')+'</b>. 경험자는 무리 없지만, 처음이시라면 조건이 나은 시간대를 골라 들어가시길 권해요.';
   } else {
     level='good'; msg='오늘은 입수하기 좋은 날이에요. 파고·풍속 모두 안정적이에요.';
   }
@@ -1440,7 +1458,7 @@ document.getElementById('dateInput').addEventListener('change', function(){ if(c
   await loadStorage();
   renderRecent();
   renderFavorites();
-  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 갈남항'; }) || DEFAULT_FAVORITES[0];
+  const sample = LOCATIONS_DB.find(function(l){ return l.name === '강원 삼척 장호항'; }) || DEFAULT_FAVORITES[0];
   selectLocation(sample);
 })();
 </script>
