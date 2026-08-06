@@ -127,7 +127,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v4.8)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v4.9)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -1156,7 +1156,7 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
     level='bad'; msg='<b>'+warnNames+'</b>이(가) 발효 중이에요. 오늘은 입수를 권하지 않아요.';
   } else if(maxWave>=1 || maxWind>=8){
     level='bad'; msg='파고 또는 풍속이 위험 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 특별한 이유가 없다면 오늘은 입수를 권하지 않아요.';
-  } else if(maxWave>=0.5 || maxWind>=4 || rainyHours>0){
+  } else if(maxWave>=0.7 || maxWind>=6 || rainyHours>0){
     level='warn';
     const reasons = [];
     const wNote = waveNote(maxWave); if(wNote) reasons.push(wNote);
@@ -1187,7 +1187,7 @@ function quickScoreForDate(targetDateStr, weatherItemsRaw, midDataRaw, loc, toda
     const windValid = valid.filter(function(h){return h.windSpeed!==null;});
     const maxWind = windValid.length ? Math.max.apply(null, windValid.map(function(h){return h.windSpeed;})) : 0;
     if(maxWave>=1 || maxWind>=8) return 20;
-    if(maxWave>=0.5 || maxWind>=4) return 55;
+    if(maxWave>=0.7 || maxWind>=6) return 55;
     return 90;
   }
   if(daysAhead>=4 && daysAhead<=10 && midDataRaw){
