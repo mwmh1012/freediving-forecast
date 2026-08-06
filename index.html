@@ -127,7 +127,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.1)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v5.2)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -1592,7 +1592,19 @@ document.getElementById('shareBtn').addEventListener('click', async function(){
       return;
     }catch(e){
       if(e && e.name === 'AbortError') return; // user cancelled the share sheet
-      // fall through to clipboard fallback below
+      // fall through — some in-app browsers (e.g. KakaoTalk) reject/misreport this
+    }
+  }
+  if(isKakaoInApp()){
+    if(isAndroidUA()){
+      if(confirm('카카오톡 브라우저에서는 공유 기능이 제한돼요.\n크롬으로 열까요? (열린 뒤 공유 버튼을 다시 눌러주세요)')){
+        const target = location.href.replace(/^https?:\/\//, '');
+        location.href = 'intent://' + target + '#Intent;scheme=https;package=com.android.chrome;end';
+      }
+      return;
+    } else {
+      alert('카카오톡 브라우저에서는 공유 기능이 제한돼요.\n\n오른쪽 아래 "•••" 메뉴 → "Safari로 열기"를 선택한 뒤 다시 눌러주세요.');
+      return;
     }
   }
   try{
