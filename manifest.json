@@ -1,0 +1,30 @@
+{
+  "name": "안따즐따 기상예보",
+  "short_name": "안따즐따",
+  "description": "지도로 찾는 프리다이빙 컨디션 — 해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 시간대별 프리다이빙 조건을 보여줘요.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B1A26",
+  "theme_color": "#0B1A26",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
