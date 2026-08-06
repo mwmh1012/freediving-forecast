@@ -132,7 +132,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v6.0)</div>
+  <div class="eyebrow"><span class="rule"></span>Forecast for Freediver (v6.2)</div>
   <h1>안따즐따 기상예보</h1>
   <p class="lead">해수욕장, 항구, 전망대 등 지명을 검색하거나 지도를 클릭하면 좌표를 가져와 시간대별 조건을 보여드려요.</p>
 
@@ -162,7 +162,7 @@
   <div class="section-label">최근 검색</div>
   <div class="chips" id="recentChips"></div>
 
-  <div class="section-label">즐겨찾는 곳 (최대 100곳, 로컬기기에 저장됩니다.)</div>
+  <div class="section-label">즐겨찾는 곳 (<span id="favCount">0</span>/100, 로컬기기에 저장됩니다.)</div>
   <div class="chips" id="favChips"></div>
 
   <div id="map"></div>
@@ -384,6 +384,8 @@ function groupNameForLoc(loc){
 }
 
 function renderFavorites(){
+  const countEl = document.getElementById('favCount');
+  if(countEl) countEl.textContent = favList.length;
   const el = document.getElementById('favChips');
   if(favList.length===0){ el.innerHTML = '<span class="empty-hint">즐겨찾는 곳이 없어요.</span>'; return; }
 
@@ -1177,7 +1179,7 @@ function renderMidRangeCard(data){
     '</div>' + taLine;
 }
 
-function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
+function generateAdvice(loc, hours, warnings, midSummary, outOfRange, sunTimes){
   if(loc.indoor || outOfRange) return null;
   const SEA_RELEVANT = ['강풍','풍랑','폭풍해일','태풍'];
   function isSeaWarning(label){ return SEA_RELEVANT.some(function(t){ return label.indexOf(t)>-1; }); }
@@ -1202,7 +1204,21 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
     return {level:level, msg:msg};
   }
 
-  const valid = hours.filter(function(h){ return h.wave!==null && h.wave!==undefined; });
+  function parseHM(hm){
+    if(!hm) return null;
+    const p = hm.split(':');
+    const n = parseInt(p[0],10) + parseInt(p[1],10)/60;
+    return isNaN(n) ? null : n;
+  }
+  const sunriseH = sunTimes ? parseHM(sunTimes.sunrise) : null;
+  const sunsetH = sunTimes ? parseHM(sunTimes.sunset) : null;
+
+  const allWave = hours.filter(function(h){ return h.wave!==null && h.wave!==undefined; });
+  // restrict to daylight hours (sunrise~sunset) when we have sun times — night-time spikes
+  // shouldn't drive a comment about a daytime dive plan
+  const valid = (sunriseH!==null && sunsetH!==null)
+    ? allWave.filter(function(h){ return h.hour>=Math.floor(sunriseH) && h.hour<=Math.ceil(sunsetH); })
+    : allWave;
   if(valid.length===0) return null;
   const maxWave = Math.max.apply(null, valid.map(function(h){return h.wave;}));
   const windValid = valid.filter(function(h){return h.windSpeed!==null;});
@@ -1244,14 +1260,22 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
   function levelIcon(lv){ return lv==='good'?'🟢':(lv==='warn'?'🟡':'🔴'); }
   const levelRank = {good:0, warn:1, bad:2};
 
-  const amEval = evalSegment(valid.filter(function(h){return h.hour<12;}));
-  const pmEval = evalSegment(valid.filter(function(h){return h.hour>=12;}));
+  const seg1 = valid.filter(function(h){return h.hour<12;});
+  const seg2 = valid.filter(function(h){return h.hour>=12 && h.hour<15;});
+  const seg3 = valid.filter(function(h){return h.hour>=15;});
+  const segments = [
+    {label:'오전', list:seg1},
+    {label:'낮(12~15시)', list:seg2},
+    {label:'늦은오후', list:seg3}
+  ].map(function(s){ const ev = evalSegment(s.list); return ev ? Object.assign({label:s.label}, ev) : null; }).filter(Boolean);
 
   let level, msg;
   if(hasWarning){
     level='bad'; msg='<b>'+warnNames+'</b>이(가) 발효 중이에요. 오늘은 입수를 권하지 않아요.';
-  } else if(amEval && pmEval && amEval.level === pmEval.level){
-    level = amEval.level;
+  } else if(segments.length===0){
+    return null;
+  } else if(segments.every(function(s){ return s.level===segments[0].level; })){
+    level = segments[0].level;
     if(level==='bad'){
       msg = '파고 또는 풍속이 위험 기준(파고 1m·풍속 8m/s)을 넘는 시간대가 있어요. 특별한 이유가 없다면 오늘은 입수를 권하지 않아요.';
     } else if(level==='warn'){
@@ -1260,21 +1284,27 @@ function generateAdvice(loc, hours, warnings, midSummary, outOfRange){
     } else {
       msg = '오늘은 입수하기 좋은 날이에요. 파고·풍속 모두 안정적이에요.';
     }
-  } else if(amEval || pmEval){
-    const parts = [];
-    if(amEval){
-      const reasons = buildReasons(amEval.maxWave, amEval.maxWind, amEval.rainyHours);
-      parts.push(levelIcon(amEval.level)+' <b>오전</b>: '+(reasons.length ? reasons.join(' · ') : levelText(amEval.level)));
-    }
-    if(pmEval){
-      const reasons = buildReasons(pmEval.maxWave, pmEval.maxWind, pmEval.rainyHours);
-      parts.push(levelIcon(pmEval.level)+' <b>오후</b>: '+(reasons.length ? reasons.join(' · ') : levelText(pmEval.level)));
-    }
-    const worst = [amEval, pmEval].filter(Boolean).reduce(function(a,b){ return levelRank[b.level]>levelRank[a.level] ? b : a; });
+  } else {
+    const merged = [];
+    segments.forEach(function(s){
+      const last = merged[merged.length-1];
+      if(last && last.level===s.level){
+        last.labels.push(s.label);
+        last.maxWave = Math.max(last.maxWave, s.maxWave);
+        last.maxWind = Math.max(last.maxWind, s.maxWind);
+        last.rainyHours += s.rainyHours;
+      } else {
+        merged.push({level:s.level, labels:[s.label], maxWave:s.maxWave, maxWind:s.maxWind, rainyHours:s.rainyHours});
+      }
+    });
+    const parts = merged.map(function(m){
+      const labelText = m.labels.length>1 ? (m.labels[0]+'~'+m.labels[m.labels.length-1]) : m.labels[0];
+      const reasons = buildReasons(m.maxWave, m.maxWind, m.rainyHours);
+      return levelIcon(m.level)+' <b>'+labelText+'</b>: '+(reasons.length ? reasons.join(' · ') : levelText(m.level));
+    });
+    const worst = merged.reduce(function(a,b){ return levelRank[b.level]>levelRank[a.level] ? b : a; });
     level = worst.level;
     msg = parts.join('<br>');
-  } else {
-    return null;
   }
   if(waterTemp!==null && waterTemp<16){
     msg += '<br>다만 수온이 낮은 편(약 '+Math.round(waterTemp)+'℃)이라, 웻슈트 보온에 신경 써주세요.';
@@ -1394,7 +1424,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
       )+
     '</div>';
 
-  const advice = generateAdvice(loc, hours, warnings, midSummary, outOfRange);
+  const advice = generateAdvice(loc, hours, warnings, midSummary, outOfRange, sunTimes);
   if(advice){
     el.innerHTML += '<div class="advice-card advice-'+advice.level+'">'+
       '<div class="advice-title">'+advIcon(advice.level)+' '+advTitle(advice.level)+'</div>'+
