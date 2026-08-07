@@ -20,12 +20,21 @@ export default async function handler(req, res) {
       ]);
       daily.push({ date: dateKey, events: events ? parseInt(events,10) : 0, visitors: visitors || 0 });
     }
+
     const recentRaw = await redis.lrange('recent_events', 0, 49);
     const recent = recentRaw.map(function(r){
       try{ return typeof r === 'string' ? JSON.parse(r) : r; }catch(e){ return null; }
     }).filter(Boolean);
 
-    res.status(200).json({ daily: daily.reverse(), recent: recent });
+    let topLocations = [];
+    try{
+      const raw = await redis.zrange('location_counts', 0, 9, { rev: true, withScores: true });
+      for(let i=0; i<raw.length; i+=2){
+        topLocations.push({ name: raw[i], count: Math.round(raw[i+1]) });
+      }
+    }catch(e){ topLocations = []; }
+
+    res.status(200).json({ daily: daily.reverse(), recent: recent, topLocations: topLocations });
   } catch(e) {
     res.status(500).json({ error: String(e) });
   }
