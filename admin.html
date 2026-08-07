@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>관리자 · 접속 로그</title>
+<style>
+  :root{
+    --abyss:#081A28; --panel:#0F2B3E; --panel2:#153C54; --line:#1E4E68;
+    --foam:#E7F3F5; --foamDim:#9FC1CB; --coral:#E8563E; --amber:#F0AE4E; --teal:#31D8B8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--abyss);color:var(--foam);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:32px 20px 60px;}
+  h1{font-size:22px;margin:0 0 20px;}
+  .gate{display:flex;gap:8px;margin-bottom:24px;}
+  .gate input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;color:var(--foam);font-size:14px;}
+  .gate button{background:var(--teal);color:var(--abyss);border:none;border-radius:10px;padding:0 18px;font-weight:700;cursor:pointer;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:20px;}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--foamDim);text-transform:uppercase;letter-spacing:.05em;}
+  .summary{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;}
+  .stat{background:var(--panel2);border-radius:10px;padding:12px 18px;min-width:110px;}
+  .stat .num{font-size:24px;font-weight:800;color:var(--teal);}
+  .stat .label{font-size:11px;color:var(--foamDim);margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);}
+  th{color:var(--foamDim);font-weight:600;font-size:11px;text-transform:uppercase;}
+  .bar-wrap{background:var(--panel2);border-radius:4px;overflow:hidden;height:8px;width:100%;}
+  .bar{background:var(--teal);height:100%;}
+  .recent-item{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;display:flex;justify-content:space-between;gap:10px;}
+  .recent-item:last-child{border-bottom:none;}
+  .recent-loc{color:var(--foam);}
+  .recent-time{color:var(--foamDim);font-size:11px;white-space:nowrap;}
+  .error{color:var(--coral);font-size:13px;}
+  .placeholder{color:var(--foamDim);font-size:13px;text-align:center;padding:20px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📊 안따즐따 기상예보 · 관리자</h1>
+  <div class="gate">
+    <input id="keyInput" type="password" placeholder="관리자 키(ADMIN_KEY) 입력" />
+    <button id="loadBtn">조회</button>
+  </div>
+  <div id="content"></div>
+</div>
+
+<script>
+const API_BASE = 'https://freediving-forecast.vercel.app';
+const content = document.getElementById('content');
+const keyInput = document.getElementById('keyInput');
+
+// remember key locally on this admin device only (not sent anywhere except our own API)
+try{ const saved = localStorage.getItem('adminKey'); if(saved) keyInput.value = saved; }catch(e){}
+
+async function loadStats(){
+  const key = keyInput.value.trim();
+  if(!key){ content.innerHTML = '<div class="error">관리자 키를 입력해주세요.</div>'; return; }
+  try{ localStorage.setItem('adminKey', key); }catch(e){}
+  content.innerHTML = '<div class="placeholder">불러오는 중...</div>';
+  try{
+    const res = await fetch(API_BASE + '/api/stats?key=' + encodeURIComponent(key) + '&days=14');
+    if(res.status === 403){ content.innerHTML = '<div class="error">키가 틀렸어요. 다시 확인해주세요.</div>'; return; }
+    const data = await res.json();
+    render(data);
+  }catch(e){
+    content.innerHTML = '<div class="error">불러오는 중 오류가 발생했어요.</div>';
+  }
+}
+
+function render(data){
+  const daily = data.daily || [];
+  const recent = data.recent || [];
+  const todayRow = daily[daily.length-1] || {events:0, visitors:0};
+  const totalEvents = daily.reduce(function(s,d){return s+d.events;}, 0);
+  const totalVisitorsSum = daily.reduce(function(s,d){return s+d.visitors;}, 0);
+  const maxEvents = Math.max.apply(null, daily.map(function(d){return d.events;}).concat([1]));
+
+  let html = '<div class="card"><h2>오늘</h2><div class="summary">'+
+    '<div class="stat"><div class="num">'+todayRow.visitors+'</div><div class="label">순수 방문자</div></div>'+
+    '<div class="stat"><div class="num">'+todayRow.events+'</div><div class="label">총 조회 횟수</div></div>'+
+  '</div></div>';
+
+  html += '<div class="card"><h2>최근 14일</h2><div class="summary">'+
+    '<div class="stat"><div class="num">'+totalVisitorsSum+'</div><div class="label">방문자 합계</div></div>'+
+    '<div class="stat"><div class="num">'+totalEvents+'</div><div class="label">조회 합계</div></div>'+
+  '</div><table><thead><tr><th>날짜</th><th>방문자</th><th>조회수</th><th></th></tr></thead><tbody>'+
+    daily.map(function(d){
+      const pct = Math.round((d.events/maxEvents)*100);
+      return '<tr><td>'+d.date+'</td><td>'+d.visitors+'</td><td>'+d.events+'</td>'+
+        '<td style="width:120px;"><div class="bar-wrap"><div class="bar" style="width:'+pct+'%;"></div></div></td></tr>';
+    }).join('') +
+  '</tbody></table></div>';
+
+  html += '<div class="card"><h2>최근 활동 (최대 50건)</h2>'+
+    (recent.length===0 ? '<div class="placeholder">아직 기록이 없어요.</div>' :
+      recent.map(function(r){
+        const t = new Date(r.ts);
+        const timeStr = t.getMonth()+1+'/'+t.getDate()+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+        return '<div class="recent-item"><span class="recent-loc">'+(r.loc || '(위치 없음)')+'</span><span class="recent-time">'+timeStr+'</span></div>';
+      }).join('')
+    ) +
+  '</div>';
+
+  content.innerHTML = html;
+}
+
+document.getElementById('loadBtn').addEventListener('click', loadStats);
+keyInput.addEventListener('keydown', function(e){ if(e.key==='Enter') loadStats(); });
+if(keyInput.value) loadStats();
+</script>
+</body>
+</html>
