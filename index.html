@@ -178,7 +178,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.1)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.2)</div>
   </div>
 </div>
 
@@ -489,6 +489,26 @@ function parseUrlState(){
   return null;
 }
 
+function getAnonId(){
+  try{
+    let id = localStorage.getItem('anonId');
+    if(!id){
+      id = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2,10);
+      localStorage.setItem('anonId', id);
+    }
+    return id;
+  }catch(e){ return 'anon'; }
+}
+function logEvent(loc, type){
+  try{
+    fetch(API_BASE + '/api/log', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ anonId: getAnonId(), loc: loc ? loc.name : null, type: type || 'view' })
+    }).catch(function(){});
+  }catch(e){}
+}
+
 function selectLocation(loc, opts){
   loc = syncWithDb(loc);
   if(!opts || !opts.silent){ searchInput.value = loc.name; }
@@ -497,6 +517,7 @@ function selectLocation(loc, opts){
   addRecent(loc);
   updateFavToggle();
   updateUrlState(loc, currentDateStr());
+  logEvent(loc, (opts && opts.silent) ? 'view' : 'search');
   loadAndRender(loc);
 }
 
