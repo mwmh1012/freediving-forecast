@@ -19,11 +19,15 @@ export default async function handler(req, res) {
     const dateKey = now.toISOString().slice(0,10);
     const ts = now.getTime();
 
-    await Promise.all([
+    const tasks = [
       redis.incr(`events:${dateKey}`),
       redis.sadd(`visitors:${dateKey}`, anonId),
       redis.lpush('recent_events', JSON.stringify({ ts, anonId, loc: loc||null, type: type||'view' }))
-    ]);
+    ];
+    if(type === 'search' && loc){
+      tasks.push(redis.zincrby('location_counts', 1, loc));
+    }
+    await Promise.all(tasks);
     await redis.ltrim('recent_events', 0, 4999);
 
     res.status(200).json({ ok: true });
