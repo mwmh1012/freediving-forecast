@@ -1,6 +1,26 @@
 import { Redis } from '@upstash/redis';
 const redis = new Redis({ url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN });
 
+function dateKeysBetween(start, end){
+  const keys = [];
+  const d = new Date(start);
+  while(d <= end){
+    keys.push(d.toISOString().slice(0,10));
+    d.setDate(d.getDate()+1);
+  }
+  return keys;
+}
+async function sumEvents(dateKeys){
+  const vals = await Promise.all(dateKeys.map(function(dk){ return redis.get(`events:${dk}`); }));
+  return vals.reduce(function(s,v){ return s + (v?parseInt(v,10):0); }, 0);
+}
+async function uniqueVisitors(dateKeys){
+  const arrs = await Promise.all(dateKeys.map(function(dk){ return redis.smembers(`visitors:${dk}`); }));
+  const set = new Set();
+  arrs.forEach(function(a){ (a||[]).forEach(function(id){ set.add(id); }); });
+  return set.size;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const { key, days } = req.query;
@@ -21,6 +41,22 @@ export default async function handler(req, res) {
       daily.push({ date: dateKey, events: events ? parseInt(events,10) : 0, visitors: visitors || 0 });
     }
 
+    const dow = today.getDay();
+    const diffToMonday = (dow === 0 ? -6 : 1) - dow;
+    const weekStart = new Date(today); weekStart.setDate(today.getDate() + diffToMonday);
+    const weekKeys = dateKeysBetween(weekStart, today);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthKeys = dateKeysBetween(monthStart, today);
+
+    const [weekEvents, monthEvents, weekVisitors, monthVisitors, totalEventsRaw, totalVisitorsRaw] = await Promise.all([
+      sumEvents(weekKeys),
+      sumEvents(monthKeys),
+      uniqueVisitors(weekKeys),
+      uniqueVisitors(monthKeys),
+      redis.get('events:total'),
+      redis.scard('visitors:total')
+    ]);
+
     const recentRaw = await redis.lrange('recent_events', 0, 49);
     const recent = recentRaw.map(function(r){
       try{ return typeof r === 'string' ? JSON.parse(r) : r; }catch(e){ return null; }
@@ -34,7 +70,17 @@ export default async function handler(req, res) {
       }
     }catch(e){ topLocations = []; }
 
-    res.status(200).json({ daily: daily.reverse(), recent: recent, topLocations: topLocations });
+    res.status(200).json({
+      daily: daily.reverse(),
+      recent: recent,
+      topLocations: topLocations,
+      summary: {
+        weekEvents: weekEvents, weekVisitors: weekVisitors,
+        monthEvents: monthEvents, monthVisitors: monthVisitors,
+        totalEvents: totalEventsRaw ? parseInt(totalEventsRaw,10) : 0,
+        totalVisitors: totalVisitorsRaw || 0
+      }
+    });
   } catch(e) {
     res.status(500).json({ error: String(e) });
   }
