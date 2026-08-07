@@ -22,6 +22,8 @@ export default async function handler(req, res) {
     const tasks = [
       redis.incr(`events:${dateKey}`),
       redis.sadd(`visitors:${dateKey}`, anonId),
+      redis.incr('events:total'),
+      redis.sadd('visitors:total', anonId),
       redis.lpush('recent_events', JSON.stringify({ ts, anonId, loc: loc||null, type: type||'view' }))
     ];
     if(type === 'search' && loc){
