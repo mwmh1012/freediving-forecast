@@ -72,20 +72,25 @@ function render(data){
   const daily = data.daily || [];
   const recent = data.recent || [];
   const top = data.topLocations || [];
-  const todayRow = daily[daily.length-1] || {events:0, visitors:0};
-  const totalEvents = daily.reduce(function(s,d){return s+d.events;}, 0);
-  const totalVisitorsSum = daily.reduce(function(s,d){return s+d.visitors;}, 0);
+  const summary = data.summary || {};
   const maxEvents = Math.max.apply(null, daily.map(function(d){return d.events;}).concat([1]));
 
-  let html = '<div class="card"><h2>오늘</h2><div class="summary">'+
-    '<div class="stat"><div class="num">'+todayRow.visitors+'</div><div class="label">순수 방문자</div></div>'+
-    '<div class="stat"><div class="num">'+todayRow.events+'</div><div class="label">총 조회 횟수</div></div>'+
+  function statBlock(title, visitors, events){
+    return '<div style="background:var(--panel2);border-radius:10px;padding:12px 16px;flex:1;min-width:120px;">'+
+      '<div style="font-size:12px;color:var(--foamDim);margin-bottom:6px;">'+title+'</div>'+
+      '<div style="font-size:20px;font-weight:800;color:var(--teal);">'+events+'<span style="font-size:11px;color:var(--foamDim);font-weight:400;"> 조회</span></div>'+
+      '<div style="font-size:12px;color:var(--foamDim);margin-top:2px;">방문자 '+visitors+'명</div>'+
+    '</div>';
+  }
+
+  let html = '<div class="card"><h2>누적 현황</h2><div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+    statBlock('총 누적', summary.totalVisitors||0, summary.totalEvents||0)+
+    statBlock('이번달', summary.monthVisitors||0, summary.monthEvents||0)+
+    statBlock('이번주', summary.weekVisitors||0, summary.weekEvents||0)+
   '</div></div>';
 
-  html += '<div class="card"><h2>최근 14일</h2><div class="summary">'+
-    '<div class="stat"><div class="num">'+totalVisitorsSum+'</div><div class="label">방문자 합계</div></div>'+
-    '<div class="stat"><div class="num">'+totalEvents+'</div><div class="label">조회 합계</div></div>'+
-  '</div><table><thead><tr><th>날짜</th><th>방문자</th><th>조회수</th><th></th></tr></thead><tbody>'+
+  html += '<div class="card"><h2>최근 14일 추이</h2>'+
+  '<table><thead><tr><th>날짜</th><th>방문자</th><th>조회수</th><th></th></tr></thead><tbody>'+
     daily.map(function(d){
       const pct = Math.round((d.events/maxEvents)*100);
       return '<tr><td>'+d.date+'</td><td>'+d.visitors+'</td><td>'+d.events+'</td>'+
