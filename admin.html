@@ -71,6 +71,7 @@ async function loadStats(){
 function render(data){
   const daily = data.daily || [];
   const recent = data.recent || [];
+  const top = data.topLocations || [];
   const todayRow = daily[daily.length-1] || {events:0, visitors:0};
   const totalEvents = daily.reduce(function(s,d){return s+d.events;}, 0);
   const totalVisitorsSum = daily.reduce(function(s,d){return s+d.visitors;}, 0);
@@ -92,17 +93,40 @@ function render(data){
     }).join('') +
   '</tbody></table></div>';
 
-  html += '<div class="card"><h2>최근 활동 (최대 50건)</h2>'+
-    (recent.length===0 ? '<div class="placeholder">아직 기록이 없어요.</div>' :
-      recent.map(function(r){
-        const t = new Date(r.ts);
-        const timeStr = t.getMonth()+1+'/'+t.getDate()+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
-        return '<div class="recent-item"><span class="recent-loc">'+(r.loc || '(위치 없음)')+'</span><span class="recent-time">'+timeStr+'</span></div>';
-      }).join('')
+  html += '<div class="card"><h2>누적 조회수 TOP 10 <span style="color:var(--foamDim);font-weight:400;text-transform:none;font-size:11px;">(실제 검색만, 초기화면 자동노출 제외)</span></h2>'+
+    (top.length===0 ? '<div class="placeholder">아직 데이터가 없어요.</div>' :
+      '<table><thead><tr><th>순위</th><th>지점</th><th>조회수</th></tr></thead><tbody>'+
+      top.map(function(t,i){ return '<tr><td>'+(i+1)+'</td><td>'+t.name+'</td><td>'+t.count+'</td></tr>'; }).join('') +
+      '</tbody></table>'
     ) +
   '</div>';
 
+  html += '<div class="card"><h2>최근 활동 (최대 50건)</h2>'+
+    '<div style="margin-bottom:10px;">'+
+      '<select id="typeFilter" style="background:var(--panel2);border:1px solid var(--line);color:var(--foam);border-radius:8px;padding:6px 10px;font-size:12px;">'+
+        '<option value="all">전체</option>'+
+        '<option value="search">실제 검색만</option>'+
+        '<option value="view">자동 노출만</option>'+
+      '</select>'+
+    '</div>'+
+    '<div id="recentList"></div>'+
+  '</div>';
+
   content.innerHTML = html;
+
+  function renderRecentList(filter){
+    const listEl = document.getElementById('recentList');
+    const filtered = recent.filter(function(r){ return filter==='all' || r.type===filter; });
+    listEl.innerHTML = filtered.length===0 ? '<div class="placeholder">해당하는 기록이 없어요.</div>' :
+      filtered.map(function(r){
+        const t = new Date(r.ts);
+        const timeStr = t.getMonth()+1+'/'+t.getDate()+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+        const tag = r.type==='search' ? '<span style="color:var(--teal);font-size:10px;">검색</span>' : '<span style="color:var(--foamDim);font-size:10px;">자동</span>';
+        return '<div class="recent-item"><span class="recent-loc">'+tag+' '+(r.loc || '(위치 없음)')+'</span><span class="recent-time">'+timeStr+'</span></div>';
+      }).join('');
+  }
+  renderRecentList('all');
+  document.getElementById('typeFilter').addEventListener('change', function(e){ renderRecentList(e.target.value); });
 }
 
 document.getElementById('loadBtn').addEventListener('click', loadStats);
