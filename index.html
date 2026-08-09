@@ -178,7 +178,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.2)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.4)</div>
   </div>
 </div>
 
@@ -935,7 +935,7 @@ function buildIndoorHours(){
 
 function renderTideSVG(tidePoints, extremes, indoor){
   if(indoor || !tidePoints || tidePoints.length===0) return '<div class="placeholder">조위 데이터가 없어요.</div>';
-  const W=760,H=190,padX=34,padY=22;
+  const W=760,H=200,padX=36,padY=28;
   const heights=tidePoints.map(function(p){return p.height;});
   const min=Math.min.apply(null,heights), max=Math.max.apply(null,heights);
   const xOf=function(h){ return padX+(h/24)*(W-padX*2); };
@@ -946,14 +946,14 @@ function renderTideSVG(tidePoints, extremes, indoor){
   let axisG='';
   for(let h=0; h<=24; h+=2){
     axisG += '<line x1="'+xOf(h)+'" y1="'+padY+'" x2="'+xOf(h)+'" y2="'+(H-padY)+'" stroke="#1E4E68" stroke-width="1"/>';
-    axisG += '<text x="'+xOf(h)+'" y="'+(H-6)+'" font-size="9" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
+    axisG += '<text x="'+xOf(h)+'" y="'+(H-8)+'" font-size="12" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
   }
   let extG='';
   (extremes||[]).forEach(function(e){
     const col = e.type==='만조'?C.coral:C.amber;
     const timeStr = Math.floor(e.h)+':'+String(Math.round((e.h%1)*60)).padStart(2,'0');
     extG += '<circle cx="'+xOf(e.h)+'" cy="'+yOf(e.height)+'" r="3.5" fill="'+col+'"/>';
-    extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)-8)+'" font-size="9" fill="#E7F3F5" text-anchor="middle">'+e.type+' '+timeStr+'</text>';
+    extG += '<text x="'+xOf(e.h)+'" y="'+(yOf(e.height)-10)+'" font-size="12" fill="#E7F3F5" text-anchor="middle">'+e.type+' '+timeStr+'</text>';
   });
   const maxVal = max/100, minVal = min/100;
   const maxLabel = (maxVal>=0?'+':'')+maxVal.toFixed(2)+'m', minLabel=(minVal>=0?'+':'')+minVal.toFixed(2)+'m';
@@ -963,8 +963,8 @@ function renderTideSVG(tidePoints, extremes, indoor){
     '<stop offset="100%" stop-color="'+C.teal+'" stop-opacity="0"/>'+
     '</linearGradient></defs>'+
     axisG+
-    '<text x="'+padX+'" y="'+(yOf(max)-4>padY?yOf(max)-4:padY+8)+'" font-size="8" fill="#9FC1CB">'+maxLabel+'</text>'+
-    '<text x="'+padX+'" y="'+(H-padY-2)+'" font-size="8" fill="#9FC1CB">'+minLabel+'</text>'+
+    '<text x="'+padX+'" y="'+(yOf(max)-6>padY?yOf(max)-6:padY+12)+'" font-size="11" fill="#9FC1CB">'+maxLabel+'</text>'+
+    '<text x="'+padX+'" y="'+(H-padY+8)+'" font-size="11" fill="#9FC1CB">'+minLabel+'</text>'+
     '<path d="'+area+'" fill="url(#tf)"/>'+
     '<path d="'+path+'" fill="none" stroke="'+C.teal+'" stroke-width="2"/>'+
     extG+
@@ -998,7 +998,7 @@ function renderWaveSVG(hours, indoor, step){
   const valid = hours.filter(function(h){ return h.wave !== null && h.wave !== undefined; });
   if(valid.length < 2) return '<div class="placeholder">파고 데이터가 없어요.</div>';
   const THRESHOLD = 1.0;
-  const W=760,H=170,padX=34,padY=20;
+  const W=760,H=180,padX=34,padY=26;
   const vals = valid.map(function(h){ return h.wave; });
   const dataMax = Math.max.apply(null, vals);
   const max = Math.max(1.3, dataMax*1.15);
@@ -1012,7 +1012,7 @@ function renderWaveSVG(hours, indoor, step){
   let axisG = '';
   for(let h=0; h<=24; h+=step){
     axisG += '<line x1="'+xOf(h)+'" y1="'+padY+'" x2="'+xOf(h)+'" y2="'+(H-padY)+'" stroke="#1E4E68" stroke-width="1"/>';
-    axisG += '<text x="'+xOf(h)+'" y="'+(H-4)+'" font-size="9" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
+    axisG += '<text x="'+xOf(h)+'" y="'+(H-6)+'" font-size="12" fill="#9FC1CB" text-anchor="middle">'+h+'시</text>';
   }
 
   let dangerBand = '', thresholdLine = '';
