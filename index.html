@@ -189,7 +189,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.1)</div>
   </div>
 </div>
 
@@ -510,8 +510,13 @@ function getAnonId(){
     return id;
   }catch(e){ return 'anon'; }
 }
+let lastLoggedKey = null, lastLoggedTime = 0;
 function logEvent(loc, type){
   try{
+    const key = (loc ? loc.name : '') + '|' + type;
+    const now = Date.now();
+    if(key === lastLoggedKey && (now - lastLoggedTime) < 3000){ return; } // dedup: same location+type within 3s
+    lastLoggedKey = key; lastLoggedTime = now;
     fetch(API_BASE + '/api/log', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
