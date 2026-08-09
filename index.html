@@ -172,13 +172,24 @@
   </div>
   <div id="addHomeTip" style="display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:10px;font-size:12px;color:var(--foamDim);"></div>
 
+  <div style="margin-top:14px;">
+    <button class="star-btn" id="feedbackToggleBtn">💬 제작자에게 코멘트 전달하기</button>
+    <div id="feedbackBox" style="display:none;margin-top:10px;">
+      <textarea id="feedbackText" rows="3" placeholder="버그 제보, 건의사항 등 자유롭게 남겨주세요" style="width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--foam);font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <button class="btn" id="feedbackSubmitBtn">전달하기</button>
+        <span id="feedbackStatus" style="font-size:12px;"></span>
+      </div>
+    </div>
+  </div>
+
   <div class="footer-note">
     검색·역지오코딩은 카카오맵 API를 사용합니다. 기상 데이터는 기상청 단기예보(격자 nx/ny 변환), 조위는 국립해양조사원 조석예보 API를 Vercel 서버리스 프록시로 호출합니다.
     조회 날짜에 따라 이렇게 나와요 — <b>오늘~3일 뒤</b>: 시간대별 상세 표(일부만 있으면 있는 만큼만 표시, 나머지는 "-"). <b>4~10일 뒤</b>: 기상청 중기예보로 오전/오후 요약(파고는 해안 지역에서만 제공). <b>11일 뒤 이후</b>: 예보 자체가 없어 안내 문구만 표시돼요.
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.0.4)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.0)</div>
   </div>
 </div>
 
@@ -1813,6 +1824,38 @@ addHomeBtn.addEventListener('click', async function(){
   }
 });
 window.addEventListener('appinstalled', function(){ deferredInstallPrompt = null; });
+
+document.getElementById('feedbackToggleBtn').addEventListener('click', function(){
+  const box = document.getElementById('feedbackBox');
+  box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+});
+document.getElementById('feedbackSubmitBtn').addEventListener('click', async function(){
+  const textEl = document.getElementById('feedbackText');
+  const statusEl = document.getElementById('feedbackStatus');
+  const msg = textEl.value.trim();
+  if(!msg){ statusEl.style.color = 'var(--coral)'; statusEl.textContent = '내용을 입력해주세요.'; return; }
+  statusEl.style.color = 'var(--foamDim)';
+  statusEl.textContent = '전송 중...';
+  try{
+    const res = await fetch(API_BASE + '/api/feedback', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ anonId: getAnonId(), loc: currentLoc ? currentLoc.name : null, message: msg })
+    });
+    if(res.ok){
+      statusEl.style.color = 'var(--teal)';
+      statusEl.textContent = '✓ 제작자에게 전달되었습니다!';
+      textEl.value = '';
+      setTimeout(function(){ statusEl.textContent = ''; }, 4000);
+    } else {
+      statusEl.style.color = 'var(--coral)';
+      statusEl.textContent = '전송에 실패했어요, 잠시 후 다시 시도해주세요.';
+    }
+  }catch(e){
+    statusEl.style.color = 'var(--coral)';
+    statusEl.textContent = '전송에 실패했어요, 잠시 후 다시 시도해주세요.';
+  }
+});
 
 document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc){ updateUrlState(currentLoc, currentDateStr()); loadAndRender(currentLoc); } });
 document.getElementById('results').addEventListener('click', function(e){

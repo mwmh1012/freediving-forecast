@@ -59,9 +59,14 @@ async function loadStats(){
   try{ localStorage.setItem('adminKey', key); }catch(e){}
   content.innerHTML = '<div class="placeholder">불러오는 중...</div>';
   try{
-    const res = await fetch(API_BASE + '/api/stats?key=' + encodeURIComponent(key) + '&days=14');
-    if(res.status === 403){ content.innerHTML = '<div class="error">키가 틀렸어요. 다시 확인해주세요.</div>'; return; }
-    const data = await res.json();
+    const [statsRes, feedbackRes] = await Promise.all([
+      fetch(API_BASE + '/api/stats?key=' + encodeURIComponent(key) + '&days=14'),
+      fetch(API_BASE + '/api/feedback?key=' + encodeURIComponent(key))
+    ]);
+    if(statsRes.status === 403){ content.innerHTML = '<div class="error">키가 틀렸어요. 다시 확인해주세요.</div>'; return; }
+    const data = await statsRes.json();
+    const feedbackData = feedbackRes.ok ? await feedbackRes.json() : { items: [] };
+    data.feedback = feedbackData.items || [];
     render(data);
   }catch(e){
     content.innerHTML = '<div class="error">불러오는 중 오류가 발생했어요.</div>';
@@ -103,6 +108,20 @@ function render(data){
       '<table><thead><tr><th>순위</th><th>지점</th><th>조회수</th></tr></thead><tbody>'+
       top.map(function(t,i){ return '<tr><td>'+(i+1)+'</td><td>'+t.name+'</td><td>'+t.count+'</td></tr>'; }).join('') +
       '</tbody></table>'
+    ) +
+  '</div>';
+
+  const feedback = data.feedback || [];
+  html += '<div class="card"><h2>💬 코멘트 ('+feedback.length+'건)</h2>'+
+    (feedback.length===0 ? '<div class="placeholder">아직 도착한 코멘트가 없어요.</div>' :
+      feedback.map(function(f){
+        const t = new Date(f.ts);
+        const timeStr = t.getMonth()+1+'/'+t.getDate()+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+        return '<div style="padding:10px 0;border-bottom:1px solid var(--line);">'+
+          '<div style="font-size:11px;color:var(--foamDim);margin-bottom:4px;">'+timeStr+(f.loc?' · '+f.loc:'')+'</div>'+
+          '<div style="font-size:13px;white-space:pre-wrap;">'+f.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'+
+        '</div>';
+      }).join('')
     ) +
   '</div>';
 
