@@ -7,6 +7,9 @@ function isAllowed(req){
   const referer = req.headers.referer || '';
   return ALLOWED_ORIGINS.some(o => origin.startsWith(o) || referer.startsWith(o));
 }
+function kstDateKey(d){
+  return new Date(d.getTime() + 9*60*60*1000).toISOString().slice(0,10);
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,7 +19,7 @@ export default async function handler(req, res) {
     const { anonId, loc, type } = req.body || {};
     if(!anonId) return res.status(400).json({ error: 'missing anonId' });
     const now = new Date();
-    const dateKey = now.toISOString().slice(0,10);
+    const dateKey = kstDateKey(now);
     const ts = now.getTime();
 
     const tasks = [
