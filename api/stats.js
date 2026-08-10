@@ -1,12 +1,15 @@
 import { Redis } from '@upstash/redis';
 const redis = new Redis({ url: process.env.KV_REST_API_URL, token: process.env.KV_REST_API_TOKEN });
 
-function dateKeysBetween(start, end){
+function kstShift(d){ return new Date(d.getTime() + 9*60*60*1000); }
+function kstKey(shifted){ return shifted.toISOString().slice(0,10); }
+
+function dateKeysBetween(startShifted, endShifted){
   const keys = [];
-  const d = new Date(start);
-  while(d <= end){
-    keys.push(d.toISOString().slice(0,10));
-    d.setDate(d.getDate()+1);
+  const d = new Date(startShifted.getTime());
+  while(d.getTime() <= endShifted.getTime()){
+    keys.push(kstKey(d));
+    d.setUTCDate(d.getUTCDate()+1);
   }
   return keys;
 }
@@ -28,12 +31,12 @@ export default async function handler(req, res) {
 
   try {
     const numDays = Math.min(parseInt(days,10) || 14, 60);
-    const today = new Date();
+    const todayShifted = kstShift(new Date());
     const daily = [];
     for(let i=0; i<numDays; i++){
-      const d = new Date(today);
-      d.setDate(d.getDate()-i);
-      const dateKey = d.toISOString().slice(0,10);
+      const d = new Date(todayShifted.getTime());
+      d.setUTCDate(d.getUTCDate()-i);
+      const dateKey = kstKey(d);
       const [events, visitors] = await Promise.all([
         redis.get(`events:${dateKey}`),
         redis.scard(`visitors:${dateKey}`)
@@ -41,12 +44,14 @@ export default async function handler(req, res) {
       daily.push({ date: dateKey, events: events ? parseInt(events,10) : 0, visitors: visitors || 0 });
     }
 
-    const dow = today.getDay();
+    const dow = todayShifted.getUTCDay();
     const diffToMonday = (dow === 0 ? -6 : 1) - dow;
-    const weekStart = new Date(today); weekStart.setDate(today.getDate() + diffToMonday);
-    const weekKeys = dateKeysBetween(weekStart, today);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthKeys = dateKeysBetween(monthStart, today);
+    const weekStart = new Date(todayShifted.getTime());
+    weekStart.setUTCDate(weekStart.getUTCDate() + diffToMonday);
+    const weekKeys = dateKeysBetween(weekStart, todayShifted);
+
+    const monthStart = new Date(Date.UTC(todayShifted.getUTCFullYear(), todayShifted.getUTCMonth(), 1));
+    const monthKeys = dateKeysBetween(monthStart, todayShifted);
 
     const [weekEvents, monthEvents, weekVisitors, monthVisitors, totalEventsRaw, totalVisitorsRaw] = await Promise.all([
       sumEvents(weekKeys),
