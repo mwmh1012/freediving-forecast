@@ -189,7 +189,7 @@
     <div style="margin-top:4px;">
       바다타임 참고: <a href="https://www.badatime.com/time-map/2" target="_blank" rel="noopener" style="color:var(--teal);">badatime.com (동해)</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.1)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.2)</div>
   </div>
 </div>
 
@@ -1184,10 +1184,15 @@ function extractMidRangeForDay(midData, dayIndex){
   return result;
 }
 
-function renderMidRangeCard(data){
+function renderMidRangeCard(data, hasSeaCode){
   if(!data) return '<div class="placeholder">중기예보 데이터를 가져오지 못했어요.</div>';
-  const hasSea = (data.whA!=null || data.whB!=null || data.whAAm!=null || data.whAPm!=null);
-  const seaNote = hasSea ? '' : '<div style="font-size:11px;color:var(--foamDim);margin-bottom:10px;">이 지점은 해상 예보 대상 지역이 아니라 파고 정보가 없어요(내륙).</div>';
+  const hasSeaData = (data.whA!=null || data.whB!=null || data.whAAm!=null || data.whAPm!=null);
+  let seaNote = '';
+  if(!hasSeaCode){
+    seaNote = '<div style="font-size:11px;color:var(--foamDim);margin-bottom:10px;">이 지점은 해상 예보 대상 지역이 아니라 파고 정보가 없어요(내륙).</div>';
+  } else if(!hasSeaData){
+    seaNote = '<div style="font-size:11px;color:var(--foamDim);margin-bottom:10px;">이 날짜의 파고 예보 데이터가 기상청에서 아직 채워지지 않았어요. 다른 날짜나 조금 뒤에 다시 확인해보세요.</div>';
+  }
   const taLine = '<div style="margin-top:12px;font-size:13px;">기온 '+(data.taMin!=null?data.taMin:'-')+'℃ ~ '+(data.taMax!=null?data.taMax:'-')+'℃</div>';
   if(data.split){
     return seaNote + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
@@ -1449,7 +1454,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
       (outOfRange
         ? '<div class="placeholder">기상청 예보 제공 범위(10일)를 벗어났어요. 이 지점의 시간대별 날씨·파고 정보는 아직 없어요.</div>'
         : (midSummary
-          ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary)
+          ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary, !!loc.midSeaCode)
           : ((hours.some(function(h){return h.isPastPrediction;})
               ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">지나간 시간대는 기상청 전날 23시 발표 예보를 활용해 채웠어요.</div>'
               : '') + renderTable(hours, loc.indoor, sunTimes, step))
