@@ -210,7 +210,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.4.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.4.3)</div>
   </div>
 </div>
 
@@ -600,8 +600,7 @@ function renderFavorites(){
   '</div>';
 
   if(favExpandAll){
-    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:2px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
-      '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
+    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
       '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;"></div>';
   } else {
     groupNames.forEach(function(g){
@@ -616,8 +615,7 @@ function renderFavorites(){
             return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
           }).join('') +
           '</div>'+
-          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:2px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
-          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
+          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
           '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
         '</div>') : '')+
       '</div>';
