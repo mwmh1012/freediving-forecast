@@ -2,12 +2,15 @@ const OBS_CODES = ['DT_0001','DT_0004','DT_0005','DT_0006','DT_0007','DT_0010','
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const { key } = req.query;
+  const { key, date } = req.query;
   if(!key || key !== process.env.ADMIN_KEY) return res.status(403).json({ error: 'Forbidden' });
 
   const dataKey = process.env.DATA_GO_KR_KEY;
-  const today = new Date();
-  const dateStr = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  let dateStr = date;
+  if(!dateStr){
+    const today = new Date();
+    dateStr = today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0');
+  }
 
   const results = await Promise.all(OBS_CODES.map(async function(code){
     try{
