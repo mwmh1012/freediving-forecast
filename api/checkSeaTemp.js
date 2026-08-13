@@ -11,7 +11,7 @@ export default async function handler(req, res) {
 
   const results = await Promise.all(OBS_CODES.map(async function(code){
     try{
-      const url = `https://apis.data.go.kr/1192136/surveyWaterTemp/GetSurveyWaterTempApiService?serviceKey=${dataKey}&type=json&numOfRows=5&pageNo=1&ObsCode=${code}&Date=${dateStr}`;
+      const url = `https://apis.data.go.kr/1192136/surveyWaterTemp/GetSurveyWaterTempApiService?serviceKey=${dataKey}&type=json&numOfRows=5&pageNo=1&obsCode=${code}&reqDate=${dateStr}`;
       const r = await fetch(url);
       const json = await r.json();
       const items = json?.response?.body?.items?.item;
