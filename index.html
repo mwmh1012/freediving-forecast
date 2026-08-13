@@ -55,7 +55,7 @@
   .fav-group-header{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--panel);border:none;color:var(--foam);font-size:13px;font-weight:700;padding:10px 14px;cursor:pointer;text-align:left;}
   .fav-group-header:hover{background:var(--panel2);}
   .fav-caret{color:var(--foamDim);font-size:11px;}
-  .fav-group-body{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;background:var(--panel2);}
+  .fav-group-body{display:block;padding:10px 12px;background:var(--panel2);}
   .chip:hover{color:var(--foam);border-color:var(--teal);}
   .chip .x{color:var(--foamDim);opacity:.6;font-size:13px;line-height:1;padding:2px 4px;border-radius:50%;}
   .chip .x:hover{opacity:1;color:var(--coral);background:rgba(232,86,62,.15);}
@@ -192,7 +192,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.1.4)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.2.0)</div>
   </div>
 </div>
 
@@ -386,11 +386,118 @@ function renderRecent(){
 }
 let favOpenGroup = null;
 let favExpandAll = false;
+let favSummaryCache = {};
 
 function groupNameForLoc(loc){
   if(!loc.landAreaCode) return '기타';
   if(loc.landAreaCode.indexOf('L109')===0) return '제주';
   return (typeof CODE_TO_NAME !== 'undefined' && CODE_TO_NAME[loc.landAreaCode]) || '기타';
+}
+
+function fmtNum(v, unit){ return v!=null ? (v+unit) : '-'; }
+function riskyCell(v, unit, warnAt, dangerAt){
+  if(v==null) return '<td style="padding:8px 2px;text-align:right;color:var(--foamDim);">-</td>';
+  const color = v>=dangerAt ? 'var(--coral)' : (v>=warnAt ? 'var(--amber)' : 'var(--foam)');
+  const weight = v>=warnAt ? '700' : '400';
+  return '<td style="padding:8px 10px 8px 2px;text-align:right;color:'+color+';font-weight:'+weight+';">'+v+unit+'</td>';
+}
+
+async function loadFavGroupSummary(groupName, locs, dateStr){
+  const containerId = 'fav-summary-'+encodeURIComponent(groupName);
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const cacheKey = groupName+'_'+dateStr;
+  if(favSummaryCache[cacheKey]){
+    container.innerHTML = favSummaryCache[cacheKey];
+    wireFavSummaryClicks(container, locs);
+    return;
+  }
+  container.innerHTML = '<div style="font-size:11px;color:var(--foamDim);padding:6px 2px;">불러오는 중...</div>';
+
+  const rows = await Promise.all(locs.map(async function(loc){
+    if(loc.indoor){
+      return { loc:loc, indoor:true };
+    }
+    try{
+      const items = await fetchWeatherItems(loc.lat, loc.lng);
+      const hours = buildHoursFromWeather(items, dateStr);
+      const validAll = hours.filter(function(h){ return h && h.wave!==null; });
+      if(validAll.length===0) return { loc:loc, noData:true };
+      function seg(list){
+        if(list.length===0) return null;
+        const maxWave = Math.max.apply(null, list.map(function(h){return h.wave;}));
+        const windValid = list.filter(function(h){return h.windSpeed!==null;});
+        const maxWind = windValid.length ? Math.max.apply(null, windValid.map(function(h){return h.windSpeed;})) : null;
+        const skyHour = list.find(function(h){return h.sky;}) || list[0];
+        return { wave:maxWave, wind:maxWind, sky: skyHour ? skyHour.sky : null };
+      }
+      const am = seg(validAll.filter(function(h){return h.hour<12;}));
+      const pm = seg(validAll.filter(function(h){return h.hour>=12;}));
+      return { loc:loc, am:am, pm:pm };
+    }catch(e){
+      return { loc:loc, noData:true };
+    }
+  }));
+
+  const html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
+    '<thead>'+
+      '<tr style="color:var(--foamDim);font-size:9px;">'+
+        '<td style="padding:0 4px 0 2px;"></td>'+
+        '<td style="padding:0 2px;text-align:center;border-left:1px solid var(--line);"></td>'+
+        '<td style="padding:0 2px;text-align:right;">오전</td>'+
+        '<td style="padding:0 10px 0 2px;text-align:right;"></td>'+
+        '<td style="padding:0 2px;text-align:center;border-left:1px solid var(--line);"></td>'+
+        '<td style="padding:0 2px;text-align:right;">오후</td>'+
+        '<td style="padding:0 10px 0 2px;text-align:right;"></td>'+
+      '</tr>'+
+      '<tr style="color:var(--foamDim);font-size:9px;border-bottom:1px solid var(--line);">'+
+        '<td style="padding:0 4px 4px 2px;"></td>'+
+        '<td style="padding:0 2px 4px;text-align:center;border-left:1px solid var(--line);">날씨</td>'+
+        '<td style="padding:0 2px 4px;text-align:right;">파도</td>'+
+        '<td style="padding:0 10px 4px 2px;text-align:right;">풍속</td>'+
+        '<td style="padding:0 2px 4px;text-align:center;border-left:1px solid var(--line);">날씨</td>'+
+        '<td style="padding:0 2px 4px;text-align:right;">파도</td>'+
+        '<td style="padding:0 10px 4px 2px;text-align:right;">풍속</td>'+
+      '</tr>'+
+    '</thead><tbody>'+
+    rows.map(function(r, i){
+      const borderTop = i>0 ? 'border-top:1px solid var(--line);' : '';
+      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:8px 4px 8px 2px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;">'+r.loc.name+'</td>';
+      if(r.indoor){
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="6" style="padding:8px 2px;text-align:center;color:var(--foamDim);">실내</td></tr>';
+      }
+      if(r.noData){
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="6" style="padding:8px 2px;text-align:center;color:var(--foamDim);">데이터 없음</td></tr>';
+      }
+      function skyCell(seg){
+        return '<td style="padding:8px 2px;text-align:center;font-size:14px;border-left:1px solid var(--line);">'+(seg && seg.sky ? (SKY_ICON[seg.sky]||seg.sky) : '-')+'</td>';
+      }
+      return '<tr style="'+borderTop+'cursor:pointer;">'+
+        nameCell+
+        skyCell(r.am)+
+        riskyCell(r.am?r.am.wave:null,'m',0.7,1)+
+        riskyCell(r.am?r.am.wind:null,'m/s',6,8)+
+        skyCell(r.pm)+
+        riskyCell(r.pm?r.pm.wave:null,'m',0.7,1)+
+        riskyCell(r.pm?r.pm.wind:null,'m/s',6,8)+
+      '</tr>';
+    }).join('') +
+    '</tbody></table>'+
+    '<div style="font-size:10px;color:var(--foamDim);margin-top:6px;">파고 0.7m↑ 또는 풍속 6m/s↑는 <span style="color:var(--amber);font-weight:700;">주황</span>, 파고 1m↑ 또는 풍속 8m/s↑는 <span style="color:var(--coral);font-weight:700;">빨강</span></div>';
+
+  favSummaryCache[cacheKey] = html;
+  container.innerHTML = html;
+  wireFavSummaryClicks(container, locs);
+}
+
+function wireFavSummaryClicks(container, locs){
+  container.querySelectorAll('.fav-summary-row').forEach(function(cell){
+    cell.addEventListener('click', function(){
+      const idx = parseInt(cell.getAttribute('data-idx'),10);
+      const loc = locs[idx];
+      if(loc) selectLocation(loc);
+    });
+  });
 }
 
 function renderFavorites(){
@@ -413,6 +520,9 @@ function renderFavorites(){
     return maxB - maxA;
   });
 
+  const dateStr = currentDateStr();
+  const dateLabel = formatDateDisplay(dateStr);
+
   let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">'+
     '<button class="star-btn" id="favExpandAllBtn" style="font-size:12px;padding:4px 10px;">'+(favExpandAll?'전체닫기':'전체보기')+'</button>'+
   '</div>';
@@ -423,10 +533,14 @@ function renderFavorites(){
       '<button class="fav-group-header" data-group="'+g+'">'+
         '<span>'+g+' ('+groups[g].length+')</span><span class="fav-caret">'+(isOpen?'▲':'▼')+'</span>'+
       '</button>'+
-      (isOpen ? ('<div class="fav-group-body">'+
+      (isOpen ? ('<div class="fav-group-body" style="display:block;">'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+
         groups[g].map(function(loc){
           return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
         }).join('') +
+        '</div>'+
+        '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+        '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
       '</div>') : '')+
     '</div>';
   });
@@ -463,6 +577,11 @@ function renderFavorites(){
       renderFavorites();
     });
   }
+
+  groupNames.forEach(function(g){
+    const isOpen = favExpandAll || (favOpenGroup === g);
+    if(isOpen) loadFavGroupSummary(g, groups[g], dateStr);
+  });
 }
 
 function syncWithDb(loc){
@@ -1870,7 +1989,7 @@ document.getElementById('feedbackSubmitBtn').addEventListener('click', async fun
   }
 });
 
-document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc){ updateUrlState(currentLoc, currentDateStr()); loadAndRender(currentLoc); } });
+document.getElementById('dateInput').addEventListener('change', function(){ if(currentLoc){ updateUrlState(currentLoc, currentDateStr()); loadAndRender(currentLoc); renderFavorites(); } });
 document.getElementById('results').addEventListener('click', function(e){
   const btn = e.target.closest('.mini-day');
   if(!btn) return;
@@ -1879,6 +1998,7 @@ document.getElementById('results').addEventListener('click', function(e){
   document.getElementById('dateInput').value = dStr.slice(0,4)+'-'+dStr.slice(4,6)+'-'+dStr.slice(6,8);
   updateUrlState(currentLoc, dStr);
   loadAndRender(currentLoc);
+  renderFavorites();
 });
 
 (async function init(){
