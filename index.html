@@ -495,17 +495,17 @@ async function buildFavSummaryHtml(locs, dateStr){
     return parts[parts.length-1];
   }
 
-  const mobileTable = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
+  const mobileTable = '<table style="width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:11px;">'+
     '<thead>'+
       '<tr style="color:var(--foamDim);font-size:9px;">'+
-        '<td class="fav-sticky-col" style="width:56px;padding:5px 4px;background:var(--panel2);position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(0,0,0,0.3);"></td>'+
-        '<td style="width:110px;padding:5px 4px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오전</td>'+
-        '<td style="width:110px;padding:5px 4px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오후</td>'+
+        '<td class="fav-sticky-col" style="width:22%;padding:5px 3px;background:var(--panel2);position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(0,0,0,0.3);"></td>'+
+        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오전</td>'+
+        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오후</td>'+
       '</tr>'+
     '</thead><tbody>'+
     rows.map(function(r, i){
       const borderTop = i>0 ? 'border-top:1px solid var(--line);' : '';
-      const nameCell = '<td class="fav-summary-row fav-sticky-col" data-idx="'+i+'" style="width:56px;padding:8px 4px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;white-space:normal;word-break:keep-all;line-height:1.3;background:var(--panel);position:sticky;left:0;z-index:1;box-shadow:2px 0 4px rgba(0,0,0,0.3);">'+shortName(r.loc.name)+'</td>';
+      const nameCell = '<td class="fav-summary-row fav-sticky-col" data-idx="'+i+'" style="width:22%;padding:8px 3px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;line-height:1.25;font-size:10.5px;background:var(--panel);position:sticky;left:0;z-index:1;box-shadow:2px 0 4px rgba(0,0,0,0.3);">'+shortName(r.loc.name)+'</td>';
       if(r.indoor){
         return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 4px;text-align:center;color:var(--foamDim);">실내</td></tr>';
       }
@@ -513,9 +513,9 @@ async function buildFavSummaryHtml(locs, dateStr){
         return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 4px;text-align:center;color:var(--foamDim);font-size:10px;">아직 기상예보가 없어요</td></tr>';
       }
       function periodCell(seg){
-        if(!seg) return '<td style="width:110px;padding:6px 4px;text-align:center;border-left:1px solid var(--line);color:var(--foamDim);">-</td>';
+        if(!seg) return '<td style="width:39%;padding:6px 3px;text-align:center;border-left:1px solid var(--line);color:var(--foamDim);">-</td>';
         const icon = seg.sky ? (SKY_ICON[seg.sky]||seg.sky) : '-';
-        return '<td style="width:110px;padding:6px 4px;text-align:center;border-left:1px solid var(--line);line-height:1.6;">'+
+        return '<td style="width:39%;padding:6px 3px;text-align:center;border-left:1px solid var(--line);line-height:1.6;">'+
           '<div>날씨 <span style="font-size:13px;">'+icon+'</span></div>'+
           '<div>'+riskySpan(seg.wave,'m',0.7,1,'파도')+'</div>'+
           '<div>'+riskySpan(seg.wind,'m/s',6,8,'풍속')+'</div>'+
