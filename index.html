@@ -214,7 +214,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.6.1)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.6.2)</div>
   </div>
 </div>
 
@@ -495,8 +495,7 @@ async function buildFavSummaryHtml(locs, dateStr){
     return parts[parts.length-1];
   }
 
-  const mobileTable = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;">'+
-    '<colgroup><col style="width:22%;"/><col style="width:39%;"/><col style="width:39%;"/></colgroup>'+
+  const mobileTable = '<table style="width:100%;border-collapse:collapse;font-size:10px;">'+
     '<thead>'+
       '<tr style="color:var(--foamDim);font-size:9px;background:var(--panel2);">'+
         '<td style="padding:4px 1px;"></td>'+
@@ -506,7 +505,7 @@ async function buildFavSummaryHtml(locs, dateStr){
     '</thead><tbody>'+
     rows.map(function(r, i){
       const borderTop = i>0 ? 'border-top:1px solid var(--line);' : '';
-      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:6px 1px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">'+shortName(r.loc.name)+'</td>';
+      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:6px 3px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48px;">'+shortName(r.loc.name)+'</td>';
       if(r.indoor){
         return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:6px 1px;text-align:center;color:var(--foamDim);">실내</td></tr>';
       }
