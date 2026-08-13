@@ -210,7 +210,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.3.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.4.0)</div>
   </div>
 </div>
 
@@ -422,29 +422,62 @@ function riskyCell(v, unit, warnAt, dangerAt){
 }
 
 async function buildFavSummaryHtml(locs, dateStr){
+  function avg(nums){ return nums.length ? +(nums.reduce(function(a,b){return a+b;},0)/nums.length).toFixed(1) : null; }
+  function seg(list, skyHourTarget){
+    if(list.length===0) return null;
+    const avgWave = avg(list.map(function(h){return h.wave;}));
+    const windValid = list.filter(function(h){return h.windSpeed!==null;});
+    const avgWind = windValid.length ? avg(windValid.map(function(h){return h.windSpeed;})) : null;
+    const skyExact = list.find(function(h){return h.hour===skyHourTarget && h.sky;});
+    const skyFallback = list.find(function(h){return h.sky;});
+    const skyPick = skyExact || skyFallback;
+    return { wave:avgWave, wind:avgWind, sky: skyPick ? skyPick.sky : null };
+  }
+
+  const todayStr = fmtYmd(new Date());
   const rows = await Promise.all(locs.map(async function(loc){
     if(loc.indoor){
       return { loc:loc, indoor:true };
     }
-    try{
-      const items = await fetchWeatherItems(loc.lat, loc.lng);
-      const hours = buildHoursFromWeather(items, dateStr);
-      const validAll = hours.filter(function(h){ return h && h.wave!==null; });
-      if(validAll.length===0) return { loc:loc, noData:true };
-      function seg(list){
-        if(list.length===0) return null;
-        const maxWave = Math.max.apply(null, list.map(function(h){return h.wave;}));
-        const windValid = list.filter(function(h){return h.windSpeed!==null;});
-        const maxWind = windValid.length ? Math.max.apply(null, windValid.map(function(h){return h.windSpeed;})) : null;
-        const skyHour = list.find(function(h){return h.sky;}) || list[0];
-        return { wave:maxWave, wind:maxWind, sky: skyHour ? skyHour.sky : null };
-      }
-      const am = seg(validAll.filter(function(h){return h.hour<12;}));
-      const pm = seg(validAll.filter(function(h){return h.hour>=12;}));
-      return { loc:loc, am:am, pm:pm };
-    }catch(e){
-      return { loc:loc, noData:true };
+    const daysAhead = daysBetween(dateStr, todayStr);
+    if(daysAhead < 0 || daysAhead > 10){
+      return { loc:loc, noForecast:true };
     }
+
+    if(daysAhead <= 3){
+      try{
+        const items = await fetchWeatherItems(loc.lat, loc.lng);
+        const hours = buildHoursFromWeather(items, dateStr);
+        const validAll = hours.filter(function(h){ return h && h.wave!==null; });
+        if(validAll.length>0){
+          const am = seg(validAll.filter(function(h){return h.hour>=7 && h.hour<12;}), 9);
+          const pm = seg(validAll.filter(function(h){return h.hour>=12 && h.hour<=19;}), 15);
+          if(am || pm) return { loc:loc, am:am, pm:pm };
+        }
+      }catch(e){}
+    }
+
+    if(loc.midLandCode || loc.midSeaCode){
+      try{
+        const midData = await fetchMidRangeData(loc);
+        const info = extractMidRangeForDay(midData, Math.max(daysAhead,4));
+        function midWaveAvg(a,b){
+          const av = a!=null ? +a : null, bv = b!=null ? +b : null;
+          if(av!=null && bv!=null) return +((av+bv)/2).toFixed(1);
+          return bv!=null ? bv : (av!=null ? av : null);
+        }
+        if(info.split){
+          const am = (info.whAAm!=null || info.whBAm!=null || info.wfAm) ? { wave: midWaveAvg(info.whAAm, info.whBAm), wind:null, sky: info.wfAm||null } : null;
+          const pm = (info.whAPm!=null || info.whBPm!=null || info.wfPm) ? { wave: midWaveAvg(info.whAPm, info.whBPm), wind:null, sky: info.wfPm||null } : null;
+          if(am || pm) return { loc:loc, am:am, pm:pm, isMid:true };
+        } else {
+          const whole = (info.whA!=null || info.whB!=null || info.wf) ? { wave: midWaveAvg(info.whA, info.whB), wind:null, sky: info.wf||null } : null;
+          if(whole) return { loc:loc, am:whole, pm:whole, isMid:true };
+        }
+      }catch(e){}
+    }
+
+    return { loc:loc, noForecast:true };
   }));
 
   const html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
@@ -474,8 +507,8 @@ async function buildFavSummaryHtml(locs, dateStr){
       if(r.indoor){
         return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="6" style="padding:8px 2px;text-align:center;color:var(--foamDim);">실내</td></tr>';
       }
-      if(r.noData){
-        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="6" style="padding:8px 2px;text-align:center;color:var(--foamDim);">데이터 없음</td></tr>';
+      if(r.noForecast){
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="6" style="padding:8px 2px;text-align:center;color:var(--foamDim);">아직 기상예보가 없어요</td></tr>';
       }
       function skyCell(seg){
         return '<td style="padding:8px 2px;text-align:center;font-size:14px;border-left:1px solid var(--line);">'+(seg && seg.sky ? (SKY_ICON[seg.sky]||seg.sky) : '-')+'</td>';
@@ -567,7 +600,8 @@ function renderFavorites(){
   '</div>';
 
   if(favExpandAll){
-    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:2px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+      '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
       '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;"></div>';
   } else {
     groupNames.forEach(function(g){
@@ -582,7 +616,8 @@ function renderFavorites(){
             return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
           }).join('') +
           '</div>'+
-          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:2px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
           '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
         '</div>') : '')+
       '</div>';
