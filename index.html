@@ -214,7 +214,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.7.1)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.7.2)</div>
   </div>
 </div>
 
@@ -499,8 +499,8 @@ async function buildFavSummaryHtml(locs, dateStr){
     '<thead>'+
       '<tr style="color:var(--foamDim);font-size:9px;">'+
         '<td class="fav-sticky-col" style="width:22%;padding:5px 3px;background:var(--panel2);position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(0,0,0,0.3);"></td>'+
-        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오전</td>'+
-        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오후</td>'+
+        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오전<br/>(07시~12시)</td>'+
+        '<td style="width:39%;padding:5px 3px;text-align:center;border-left:1px solid var(--line);background:var(--panel2);">오후<br/>(12시~19시)</td>'+
       '</tr>'+
     '</thead><tbody>'+
     rows.map(function(r, i){
@@ -534,10 +534,10 @@ async function buildFavSummaryHtml(locs, dateStr){
       '<tr style="color:var(--foamDim);font-size:9px;">'+
         '<td style="padding:0 4px 0 2px;"></td>'+
         '<td style="padding:0 2px;text-align:center;border-left:1px solid var(--line);"></td>'+
-        '<td style="padding:0 2px;text-align:right;">오전</td>'+
+        '<td style="padding:0 2px;text-align:right;">오전(07~12시)</td>'+
         '<td style="padding:0 10px 0 2px;text-align:right;"></td>'+
         '<td style="padding:0 2px;text-align:center;border-left:1px solid var(--line);"></td>'+
-        '<td style="padding:0 2px;text-align:right;">오후</td>'+
+        '<td style="padding:0 2px;text-align:right;">오후(12~19시)</td>'+
         '<td style="padding:0 10px 0 2px;text-align:right;"></td>'+
       '</tr>'+
       '<tr style="color:var(--foamDim);font-size:9px;border-bottom:1px solid var(--line);">'+
@@ -652,7 +652,7 @@ function renderFavorites(){
   '</div>';
 
   if(favExpandAll){
-    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
+    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 아래 테이블에 상세정보가 해당지역으로 바뀌어요<br/>오전/오후 평균값</div>'+
       '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow-x:auto;"></div>';
   } else {
     groupNames.forEach(function(g){
@@ -667,7 +667,7 @@ function renderFavorites(){
             return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
           }).join('') +
           '</div>'+
-          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
+          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 아래 테이블에 상세정보가 해당지역으로 바뀌어요<br/>오전/오후 평균값</div>'+
           '<div id="fav-summary-'+encodeURIComponent(g)+'" style="overflow-x:auto;"></div>'+
         '</div>') : '')+
       '</div>';
