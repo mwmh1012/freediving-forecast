@@ -103,7 +103,11 @@
   .advice-bad{background:rgba(232,86,62,.12);border:1px solid var(--coral);}
   .advice-title{font-weight:700;margin-bottom:6px;}
 
+  .fav-summary-mobile{display:none;}
+  .fav-summary-desktop{display:block;}
   @media (max-width: 640px){
+    .fav-summary-mobile{display:block;}
+    .fav-summary-desktop{display:none;}
     .wrap{padding:20px 14px 40px;}
     h1{font-size:23px;}
     .lead{font-size:13px;}
@@ -210,7 +214,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.4.3)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.6.0)</div>
   </div>
 </div>
 
@@ -414,6 +418,12 @@ function groupNameForLoc(loc){
 }
 
 function fmtNum(v, unit){ return v!=null ? (v+unit) : '-'; }
+function riskySpan(v, unit, warnAt, dangerAt, label){
+  if(v==null) return label+' -';
+  const color = v>=dangerAt ? 'var(--coral)' : (v>=warnAt ? 'var(--amber)' : 'var(--foam)');
+  const weight = v>=warnAt ? '700' : '400';
+  return label+' <span style="color:'+color+';font-weight:'+weight+';">'+v+unit+'</span>';
+}
 function riskyCell(v, unit, warnAt, dangerAt){
   if(v==null) return '<td style="padding:8px 2px;text-align:right;color:var(--foamDim);">-</td>';
   const color = v>=dangerAt ? 'var(--coral)' : (v>=warnAt ? 'var(--amber)' : 'var(--foam)');
@@ -480,7 +490,42 @@ async function buildFavSummaryHtml(locs, dateStr){
     return { loc:loc, noForecast:true };
   }));
 
-  const html = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
+  const mobileTable = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px;">'+
+    '<colgroup><col style="width:26%;"/><col style="width:37%;"/><col style="width:37%;"/></colgroup>'+
+    '<thead>'+
+      '<tr style="color:var(--foamDim);font-size:9px;background:var(--panel2);">'+
+        '<td style="padding:5px 2px;"></td>'+
+        '<td style="padding:5px 2px;text-align:center;border-left:1px solid var(--line);">오전</td>'+
+        '<td style="padding:5px 2px;text-align:center;border-left:1px solid var(--line);">오후</td>'+
+      '</tr>'+
+    '</thead><tbody>'+
+    rows.map(function(r, i){
+      const borderTop = i>0 ? 'border-top:1px solid var(--line);' : '';
+      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:8px 2px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+r.loc.name+'</td>';
+      if(r.indoor){
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 2px;text-align:center;color:var(--foamDim);">실내</td></tr>';
+      }
+      if(r.noForecast){
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 2px;text-align:center;color:var(--foamDim);">아직 기상예보가 없어요</td></tr>';
+      }
+      function periodCell(seg){
+        if(!seg) return '<td style="padding:6px 2px;text-align:center;border-left:1px solid var(--line);color:var(--foamDim);">-</td>';
+        const icon = seg.sky ? (SKY_ICON[seg.sky]||seg.sky) : '-';
+        return '<td style="padding:6px 2px;text-align:center;border-left:1px solid var(--line);">'+
+          '<div style="font-size:14px;">'+icon+'</div>'+
+          '<div style="font-size:10px;margin-top:2px;">'+riskySpan(seg.wave,'m',0.7,1,'파도')+'</div>'+
+          '<div style="font-size:10px;">'+riskySpan(seg.wind,'m/s',6,8,'풍속')+'</div>'+
+        '</td>';
+      }
+      return '<tr style="'+borderTop+'cursor:pointer;">'+
+        nameCell+
+        periodCell(r.am)+
+        periodCell(r.pm)+
+      '</tr>';
+    }).join('') +
+    '</tbody></table>';
+
+  const desktopTable = '<table style="width:100%;border-collapse:collapse;font-size:11px;">'+
     '<thead>'+
       '<tr style="color:var(--foamDim);font-size:9px;">'+
         '<td style="padding:0 4px 0 2px;"></td>'+
@@ -523,7 +568,10 @@ async function buildFavSummaryHtml(locs, dateStr){
         riskyCell(r.pm?r.pm.wind:null,'m/s',6,8)+
       '</tr>';
     }).join('') +
-    '</tbody></table>'+
+    '</tbody></table>';
+
+  const html = '<div class="fav-summary-desktop">'+desktopTable+'</div>'+
+    '<div class="fav-summary-mobile">'+mobileTable+'</div>'+
     '<div style="font-size:10px;color:var(--foamDim);margin-top:6px;">파고 0.7m↑ 또는 풍속 6m/s↑는 <span style="color:var(--amber);font-weight:700;">주황</span>, 파고 1m↑ 또는 풍속 8m/s↑는 <span style="color:var(--coral);font-weight:700;">빨강</span></div>';
   return html;
 }
@@ -601,7 +649,7 @@ function renderFavorites(){
 
   if(favExpandAll){
     html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
-      '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;"></div>';
+      '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow-x:auto;"></div>';
   } else {
     groupNames.forEach(function(g){
       const isOpen = favOpenGroup === g;
@@ -616,7 +664,7 @@ function renderFavorites(){
           }).join('') +
           '</div>'+
           '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요<br/>오전(07시~12시 사이) / 오후(12시~19시 사이)의 평균값</div>'+
-          '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
+          '<div id="fav-summary-'+encodeURIComponent(g)+'" style="overflow-x:auto;"></div>'+
         '</div>') : '')+
       '</div>';
     });
