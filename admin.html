@@ -111,6 +111,15 @@ function render(data){
     ) +
   '</div>';
 
+  const favTop = data.favoriteTop || [];
+  html += '<div class="card"><h2>⭐ 즐겨찾기 인기 TOP 10 <span style="color:var(--foamDim);font-weight:400;text-transform:none;font-size:11px;">(추가 시점부터 집계, 익명)</span></h2>'+
+    (favTop.length===0 ? '<div class="placeholder">아직 데이터가 없어요.</div>' :
+      '<table><thead><tr><th>순위</th><th>지점</th><th>즐겨찾기 수</th></tr></thead><tbody>'+
+      favTop.map(function(t,i){ return '<tr><td>'+(i+1)+'</td><td>'+t.name+'</td><td>'+t.count+'</td></tr>'; }).join('') +
+      '</tbody></table>'
+    ) +
+  '</div>';
+
   const feedback = data.feedback || [];
   html += '<div class="card"><h2>💬 코멘트 ('+feedback.length+'건)</h2>'+
     (feedback.length===0 ? '<div class="placeholder">아직 도착한 코멘트가 없어요.</div>' :
