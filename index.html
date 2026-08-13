@@ -210,7 +210,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.2.1)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.3.0)</div>
   </div>
 </div>
 
@@ -421,18 +421,7 @@ function riskyCell(v, unit, warnAt, dangerAt){
   return '<td style="padding:8px 10px 8px 2px;text-align:right;color:'+color+';font-weight:'+weight+';">'+v+unit+'</td>';
 }
 
-async function loadFavGroupSummary(groupName, locs, dateStr){
-  const containerId = 'fav-summary-'+encodeURIComponent(groupName);
-  const container = document.getElementById(containerId);
-  if(!container) return;
-  const cacheKey = groupName+'_'+dateStr;
-  if(favSummaryCache[cacheKey]){
-    container.innerHTML = favSummaryCache[cacheKey];
-    wireFavSummaryClicks(container, locs);
-    return;
-  }
-  container.innerHTML = '<div style="font-size:11px;color:var(--foamDim);padding:6px 2px;">불러오는 중...</div>';
-
+async function buildFavSummaryHtml(locs, dateStr){
   const rows = await Promise.all(locs.map(async function(loc){
     if(loc.indoor){
       return { loc:loc, indoor:true };
@@ -503,7 +492,37 @@ async function loadFavGroupSummary(groupName, locs, dateStr){
     }).join('') +
     '</tbody></table>'+
     '<div style="font-size:10px;color:var(--foamDim);margin-top:6px;">파고 0.7m↑ 또는 풍속 6m/s↑는 <span style="color:var(--amber);font-weight:700;">주황</span>, 파고 1m↑ 또는 풍속 8m/s↑는 <span style="color:var(--coral);font-weight:700;">빨강</span></div>';
+  return html;
+}
 
+async function loadFavGroupSummary(groupName, locs, dateStr){
+  const containerId = 'fav-summary-'+encodeURIComponent(groupName);
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const cacheKey = groupName+'_'+dateStr;
+  if(favSummaryCache[cacheKey]){
+    container.innerHTML = favSummaryCache[cacheKey];
+    wireFavSummaryClicks(container, locs);
+    return;
+  }
+  container.innerHTML = '<div style="font-size:11px;color:var(--foamDim);padding:6px 2px;">불러오는 중...</div>';
+  const html = await buildFavSummaryHtml(locs, dateStr);
+  favSummaryCache[cacheKey] = html;
+  container.innerHTML = html;
+  wireFavSummaryClicks(container, locs);
+}
+
+async function loadFavAllSummary(locs, dateStr){
+  const container = document.getElementById('fav-summary-all');
+  if(!container) return;
+  const cacheKey = 'ALL_'+dateStr;
+  if(favSummaryCache[cacheKey]){
+    container.innerHTML = favSummaryCache[cacheKey];
+    wireFavSummaryClicks(container, locs);
+    return;
+  }
+  container.innerHTML = '<div style="font-size:11px;color:var(--foamDim);padding:6px 2px;">불러오는 중...</div>';
+  const html = await buildFavSummaryHtml(locs, dateStr);
   favSummaryCache[cacheKey] = html;
   container.innerHTML = html;
   wireFavSummaryClicks(container, locs);
@@ -541,36 +560,41 @@ function renderFavorites(){
 
   const dateStr = currentDateStr();
   const dateLabel = formatDateDisplay(dateStr);
+  const allLocsSorted = groupNames.reduce(function(acc, g){ return acc.concat(groups[g]); }, []);
 
   let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">'+
     '<button class="star-btn" id="favExpandAllBtn" style="font-size:12px;padding:4px 10px;">'+(favExpandAll?'전체닫기':'전체보기')+'</button>'+
   '</div>';
 
-  groupNames.forEach(function(g){
-    const isOpen = favExpandAll || (favOpenGroup === g);
-    html += '<div class="fav-group">'+
-      '<button class="fav-group-header" data-group="'+g+'">'+
-        '<span>'+g+' ('+groups[g].length+')</span><span class="fav-caret">'+(isOpen?'▲':'▼')+'</span>'+
-      '</button>'+
-      (isOpen ? ('<div class="fav-group-body" style="display:block;">'+
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+
-        groups[g].map(function(loc){
-          return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
-        }).join('') +
-        '</div>'+
-        '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
-        '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
-      '</div>') : '')+
-    '</div>';
-  });
+  if(favExpandAll){
+    html += '<div style="font-size:10px;color:var(--foamDim);margin-bottom:8px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+      '<div id="fav-summary-all" style="border:1px solid var(--line);border-radius:12px;overflow:hidden;"></div>';
+  } else {
+    groupNames.forEach(function(g){
+      const isOpen = favOpenGroup === g;
+      html += '<div class="fav-group">'+
+        '<button class="fav-group-header" data-group="'+g+'">'+
+          '<span>'+g+' ('+groups[g].length+')</span><span class="fav-caret">'+(isOpen?'▲':'▼')+'</span>'+
+        '</button>'+
+        (isOpen ? ('<div class="fav-group-body" style="display:block;">'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'+
+          groups[g].map(function(loc){
+            return '<button class="chip" data-lat="'+loc.lat+'" data-lng="'+loc.lng+'"><span>'+loc.name+'</span><span class="x" data-remove="1">✕</span></button>';
+          }).join('') +
+          '</div>'+
+          '<div style="font-size:10px;color:var(--foamDim);margin-bottom:6px;">'+dateLabel+' 기준 · 장소를 누르면 상세로 이동해요</div>'+
+          '<div id="fav-summary-'+encodeURIComponent(g)+'"></div>'+
+        '</div>') : '')+
+      '</div>';
+    });
+  }
 
   el.innerHTML = html;
 
   el.querySelectorAll('.fav-group-header').forEach(function(btn){
     btn.addEventListener('click', function(){
       const g = btn.getAttribute('data-group');
-      if(favExpandAll){ favExpandAll = false; favOpenGroup = g; }
-      else { favOpenGroup = (favOpenGroup === g) ? null : g; }
+      favOpenGroup = (favOpenGroup === g) ? null : g;
       renderFavorites();
     });
   });
@@ -597,10 +621,11 @@ function renderFavorites(){
     });
   }
 
-  groupNames.forEach(function(g){
-    const isOpen = favExpandAll || (favOpenGroup === g);
-    if(isOpen) loadFavGroupSummary(g, groups[g], dateStr);
-  });
+  if(favExpandAll){
+    loadFavAllSummary(allLocsSorted, dateStr);
+  } else if(favOpenGroup){
+    loadFavGroupSummary(favOpenGroup, groups[favOpenGroup], dateStr);
+  }
 }
 
 function syncWithDb(loc){
