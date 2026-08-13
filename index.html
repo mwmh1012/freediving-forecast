@@ -210,7 +210,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.2.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.2.1)</div>
   </div>
 </div>
 
@@ -383,6 +383,7 @@ function toggleFavorite(){
   } else {
     if(favList.length>=100){ document.getElementById('searchStatus').textContent = '즐겨찾기는 최대 100곳까지 저장할 수 있어요.'; return; }
     favList.push({name:currentLoc.name, lat:currentLoc.lat, lng:currentLoc.lng, indoor:!!currentLoc.indoor, obsCode:currentLoc.obsCode||null, areaCode:currentLoc.areaCode||null, landAreaCode:currentLoc.landAreaCode||null, midSeaCode:currentLoc.midSeaCode||null, midLandCode:currentLoc.midLandCode||null, midTaCode:currentLoc.midTaCode||null});
+    logEvent(currentLoc, 'favorite_add');
   }
   saveFavorites(); renderFavorites(); updateFavToggle();
 }
