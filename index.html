@@ -214,7 +214,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.6.0)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.6.1)</div>
   </div>
 </div>
 
@@ -490,31 +490,36 @@ async function buildFavSummaryHtml(locs, dateStr){
     return { loc:loc, noForecast:true };
   }));
 
-  const mobileTable = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px;">'+
-    '<colgroup><col style="width:26%;"/><col style="width:37%;"/><col style="width:37%;"/></colgroup>'+
+  function shortName(name){
+    const parts = name.trim().split(/\s+/);
+    return parts[parts.length-1];
+  }
+
+  const mobileTable = '<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;">'+
+    '<colgroup><col style="width:22%;"/><col style="width:39%;"/><col style="width:39%;"/></colgroup>'+
     '<thead>'+
       '<tr style="color:var(--foamDim);font-size:9px;background:var(--panel2);">'+
-        '<td style="padding:5px 2px;"></td>'+
-        '<td style="padding:5px 2px;text-align:center;border-left:1px solid var(--line);">오전</td>'+
-        '<td style="padding:5px 2px;text-align:center;border-left:1px solid var(--line);">오후</td>'+
+        '<td style="padding:4px 1px;"></td>'+
+        '<td style="padding:4px 1px;text-align:center;border-left:1px solid var(--line);">오전</td>'+
+        '<td style="padding:4px 1px;text-align:center;border-left:1px solid var(--line);">오후</td>'+
       '</tr>'+
     '</thead><tbody>'+
     rows.map(function(r, i){
       const borderTop = i>0 ? 'border-top:1px solid var(--line);' : '';
-      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:8px 2px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+r.loc.name+'</td>';
+      const nameCell = '<td class="fav-summary-row" data-idx="'+i+'" style="padding:6px 1px;color:var(--foam);font-weight:700;text-align:center;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">'+shortName(r.loc.name)+'</td>';
       if(r.indoor){
-        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 2px;text-align:center;color:var(--foamDim);">실내</td></tr>';
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:6px 1px;text-align:center;color:var(--foamDim);">실내</td></tr>';
       }
       if(r.noForecast){
-        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:8px 2px;text-align:center;color:var(--foamDim);">아직 기상예보가 없어요</td></tr>';
+        return '<tr style="'+borderTop+'">'+nameCell+'<td colspan="2" style="padding:6px 1px;text-align:center;color:var(--foamDim);font-size:9px;">아직 기상예보가 없어요</td></tr>';
       }
       function periodCell(seg){
-        if(!seg) return '<td style="padding:6px 2px;text-align:center;border-left:1px solid var(--line);color:var(--foamDim);">-</td>';
+        if(!seg) return '<td style="padding:5px 1px;text-align:center;border-left:1px solid var(--line);color:var(--foamDim);">-</td>';
         const icon = seg.sky ? (SKY_ICON[seg.sky]||seg.sky) : '-';
-        return '<td style="padding:6px 2px;text-align:center;border-left:1px solid var(--line);">'+
-          '<div style="font-size:14px;">'+icon+'</div>'+
-          '<div style="font-size:10px;margin-top:2px;">'+riskySpan(seg.wave,'m',0.7,1,'파도')+'</div>'+
-          '<div style="font-size:10px;">'+riskySpan(seg.wind,'m/s',6,8,'풍속')+'</div>'+
+        return '<td style="padding:5px 1px;text-align:center;border-left:1px solid var(--line);line-height:1.5;">'+
+          '<div>날씨 <span style="font-size:12px;">'+icon+'</span></div>'+
+          '<div>'+riskySpan(seg.wave,'m',0.7,1,'파도')+'</div>'+
+          '<div>'+riskySpan(seg.wind,'m/s',6,8,'풍속')+'</div>'+
         '</td>';
       }
       return '<tr style="'+borderTop+'cursor:pointer;">'+
