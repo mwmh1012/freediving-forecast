@@ -75,10 +75,19 @@ export default async function handler(req, res) {
       }
     }catch(e){ topLocations = []; }
 
+    let favoriteTop = [];
+    try{
+      const rawFav = await redis.zrange('favorite_counts', 0, 9, { rev: true, withScores: true });
+      for(let i=0; i<rawFav.length; i+=2){
+        favoriteTop.push({ name: rawFav[i], count: Math.round(rawFav[i+1]) });
+      }
+    }catch(e){ favoriteTop = []; }
+
     res.status(200).json({
       daily: daily.reverse(),
       recent: recent,
       topLocations: topLocations,
+      favoriteTop: favoriteTop,
       summary: {
         weekEvents: weekEvents, weekVisitors: weekVisitors,
         monthEvents: monthEvents, monthVisitors: monthVisitors,
