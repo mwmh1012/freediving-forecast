@@ -32,6 +32,9 @@ export default async function handler(req, res) {
     if(type === 'search' && loc){
       tasks.push(redis.zincrby('location_counts', 1, loc));
     }
+    if(type === 'favorite_add' && loc){
+      tasks.push(redis.zincrby('favorite_counts', 1, loc));
+    }
     await Promise.all(tasks);
     await redis.ltrim('recent_events', 0, 4999);
 
