@@ -214,7 +214,7 @@
     <div style="margin-top:4px;">
       실시간 수온 관측 사이트: <a href="https://nifs.go.kr/risa/risa/risaA/actionRisaInfo.do" target="_blank" rel="noopener" style="color:var(--teal);">국립수산과학원</a>
     </div>
-    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.7.2)</div>
+    <div style="margin-top:4px;">제작 : mwmh1012@gmail.com (v2.7.3)</div>
   </div>
 </div>
 
@@ -1141,6 +1141,11 @@ async function loadAndRender(loc){
     hours = hours.map(function(h){ return Object.assign({}, h, mockExtra(loc.lat, loc.lng, dateStr, h.hour)); });
   }
 
+  const isInland = !loc.indoor && !(function(){
+    const n = nearestDbEntry(loc.lat, loc.lng);
+    return n && n.dist <= 25;
+  })();
+
   let tideData = null, tideLive = false;
   if(loc.obsCode){
     try{
@@ -1152,7 +1157,7 @@ async function loadAndRender(loc){
       if(tidePoints.length>0){ tideData = {tidePoints:tidePoints, extremes:extremes}; tideLive = true; }
     }catch(e){ tideLive = false; }
   }
-  if(!tideLive){ tideData = mockTide(loc.lat, loc.lng, dateStr); }
+  if(!tideLive){ tideData = isInland ? {tidePoints:[], extremes:[]} : mockTide(loc.lat, loc.lng, dateStr); }
 
   let sunTimes = null;
   try{ sunTimes = await fetchSunTimes(loc.lat, loc.lng, dateStr); }catch(e){ sunTimes = null; }
@@ -1189,7 +1194,7 @@ async function loadAndRender(loc){
     }catch(e){}
   }
 
-  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItems, midDataRaw);
+  renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItems, midDataRaw, isInland);
 }
 
 function buildIndoorHours(){
@@ -1334,7 +1339,7 @@ function nearestColumnHour(hhmm, step){
   return nearest;
 }
 
-function renderTable(hours, indoor, sunTimes, step){
+function renderTable(hours, indoor, sunTimes, step, inland){
   step = step || 2;
   const twoHourly = hours.filter(function(h){ return h.hour%step===0; });
   let head = '<tr><th class="row-label">시간</th>' + twoHourly.map(function(h){ return '<th>'+h.hour+'시</th>'; }).join('') + '</tr>';
@@ -1349,21 +1354,21 @@ function renderTable(hours, indoor, sunTimes, step){
       return '<td style="font-size:10px;">'+(parts.length ? parts.join('<br>') : '-')+'</td>';
     }).join('') + '</tr>';
   }
-  let scoreRow = '<tr><td class="row-label">입수적합도</td>' + twoHourly.map(function(h){
+  let scoreRow = inland ? '' : ('<tr><td class="row-label">입수적합도</td>' + twoHourly.map(function(h){
     const s = hourScore(indoor?{sky:'실내'}:h);
     if(s===null) return '<td style="color:var(--foamDim)">-</td>';
     return '<td><span class="dot" style="background:'+scoreColor(s)+'" title="'+s+'점"></span></td>';
-  }).join('') + '</tr>';
-  let waveRow = '<tr><td class="row-label">파고</td>' + twoHourly.map(function(h){
+  }).join('') + '</tr>');
+  let waveRow = inland ? '' : ('<tr><td class="row-label">파고</td>' + twoHourly.map(function(h){
     if(indoor || h.wave===null) return '<td>-</td>';
     return '<td>'+riskyText(h.wave+'m', h.wave>=1)+'</td>';
-  }).join('') + '</tr>';
-  let windRow = '<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(function(h){
+  }).join('') + '</tr>');
+  let windRow = inland ? '' : ('<tr><td class="row-label">풍향/풍속</td>' + twoHourly.map(function(h){
     if(indoor || h.windSpeed===null) return '<td>-</td>';
     const deg = h.windDeg!==null ? h.windDeg : (DIR_DEG[h.windDir]||0);
     return '<td><span class="wind-cell"><span class="arrow" style="transform:rotate('+deg+'deg)">↑</span>'+riskyText(h.windSpeed+'m/s', h.windSpeed>=8)+'</span></td>';
-  }).join('') + '</tr>';
-  let waterTempRow = '<tr><td class="row-label">표층수온<span class="sub">(계절평균값)</span></td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>';
+  }).join('') + '</tr>');
+  let waterTempRow = inland ? '' : ('<tr><td class="row-label">표층수온<span class="sub">(계절평균값)</span></td>' + twoHourly.map(function(h){ return '<td>'+Math.round(h.waterTemp)+'℃</td>'; }).join('') + '</tr>');
   let tempRow = '<tr><td class="row-label">기온</td>' + twoHourly.map(function(h){ return '<td>'+(h.temp!==null?h.temp+'℃':'-')+'</td>'; }).join('') + '</tr>';
   let skyRow = '<tr><td class="row-label">하늘</td>' + twoHourly.map(function(h){ return '<td><span class="sky-icon">'+(h.sky ? (SKY_ICON[h.sky]||h.sky) : '-')+'</span></td>'; }).join('') + '</tr>';
   let precipRow = '<tr><td class="row-label">강수</td>' + twoHourly.map(function(h){
@@ -1372,10 +1377,11 @@ function renderTable(hours, indoor, sunTimes, step){
   }).join('') + '</tr>';
   return '<div class="table-wrap"><table><thead>'+head+'</thead><tbody>'+sunRow+scoreRow+skyRow+precipRow+tempRow+waveRow+windRow+waterTempRow+'</tbody></table></div>'+
   '<div class="legend">'+
+    (inland ? '' :
     '<span><span class="dot" style="background:'+C.teal+'"></span>우수</span>'+
     '<span><span class="dot" style="background:'+C.amber+'"></span>보통</span>'+
-    '<span><span class="dot" style="background:'+C.coral+'"></span>주의</span>'+
-    '<span style="margin-left:auto">파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 수온은 <b style="color:'+C.amber+'">계절 추정치</b> · <b style="color:'+C.coral+'">빨간 숫자</b>는 AIDA2 기준 주의 수치</span>'+
+    '<span><span class="dot" style="background:'+C.coral+'"></span>주의</span>')+
+    '<span style="margin-left:auto">'+(inland ? '기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>' : '파고·풍속·기온·하늘·강수는 <b style="color:'+C.teal+'">기상청 실시간</b>, 수온은 <b style="color:'+C.amber+'">계절 추정치</b> · <b style="color:'+C.coral+'">빨간 숫자</b>는 AIDA2 기준 주의 수치')+'</span>'+
   '</div>';
 }
 
@@ -1657,7 +1663,7 @@ function daysBetween(dateStr, todayStr){
   return Math.round((d1-d2)/(1000*60*60*24));
 }
 
-function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItemsRaw, midDataRaw){
+function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTimes, warnings, midSummary, outOfRange, weatherItemsRaw, midDataRaw, isInland){
   const el = document.getElementById('results');
   const todayStr = fmtYmd(new Date());
   const isFutureDate = dateStr !== todayStr;
@@ -1683,7 +1689,11 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
     '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">최근 6일 내 발효된 특보는 발효 시점을 표시하고, 그 이전부터 이어지고 있는 특보는 시점 없이 표시돼요</div>'+
     warnCardBody+'</div>';
   el.innerHTML = miniStripHtml + warnCard +
-    '<div class="card">'+
+    (isInland
+      ? '<div class="card"><div class="card-head"><h3>'+loc.name+'</h3></div>'+
+        '<div style="color:var(--foamDim);font-size:13px;line-height:1.6;">이 지점은 해안에서 멀리 떨어진 내륙 지역으로 보여요. 조위·파고 등 프리다이빙 조건 정보는 해안가 지점에서만 제공돼요. 아래 표에서는 일반 날씨 정보(하늘·기온·강수)만 확인하실 수 있어요.</div>'+
+      '</div>'
+      : '<div class="card">'+
       '<div class="card-head">'+
         '<h3>'+loc.name+' · 조위(물높이) 그래프</h3>'+
         '<span class="meta">'+loc.lat.toFixed(4)+', '+loc.lng.toFixed(4)+' · '+dateStr+
@@ -1696,7 +1706,7 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
         '<div style="font-size:11px;color:var(--foamDim);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:14px;">파고(m) 변화 — 붉은 배경은 1m 이상 주의 구간 · 출처: 기상청 단기예보</div>'+
         renderWaveSVG(hours, loc.indoor, step)
       ))+
-    '</div>'+
+    '</div>')+
     '<div class="card">'+
       '<div class="card-head">'+
         '<h3>'+(outOfRange ? '시간대별 상세' : (midSummary ? ('시간대별 상세 ('+formatDateDisplay(dateStr)+') · '+daysAhead+'일 후') : ('시간대별 상세 ('+formatDateDisplay(dateStr)+')')))+'</h3>'+
@@ -1708,12 +1718,12 @@ function renderFinal(loc, hours, tideData, weatherLive, tideLive, dateStr, sunTi
           ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">4~10일 뒤는 기상청이 오전/오후 단위로만 예보해요. 3일 이내처럼 촘촘한 시간대별 값은 제공되지 않아요.</div>' + renderMidRangeCard(midSummary, !!loc.midSeaCode)
           : ((hours.some(function(h){return h.isPastPrediction;})
               ? '<div style="font-size:11px;color:var(--foamDim);margin:-4px 0 10px;">지나간 시간대는 기상청 전날 23시 발표 예보를 활용해 채웠어요.</div>'
-              : '') + renderTable(hours, loc.indoor, sunTimes, step))
+              : '') + renderTable(hours, loc.indoor, sunTimes, step, isInland))
         )
       )+
     '</div>';
 
-  const advice = generateAdvice(loc, hours, warnings, midSummary, outOfRange, sunTimes);
+  const advice = isInland ? null : generateAdvice(loc, hours, warnings, midSummary, outOfRange, sunTimes);
   if(advice){
     el.innerHTML += '<div class="advice-card advice-'+advice.level+'">'+
       '<div class="advice-title">'+advIcon(advice.level)+' '+advTitle(advice.level)+'</div>'+
